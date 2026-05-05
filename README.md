@@ -1,4 +1,4 @@
-# Cyberbullying Detector
+# Intelligent Real-Time Cyberbullying Detection System
 
 This project is a deployable local web app for rule-based cyberbullying detection. It does not use a database.
 

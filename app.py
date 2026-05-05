@@ -102,13 +102,13 @@ def render_page(prediction=None, comment_text="", setup_message="", pipeline_sta
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Cyberbullying Detector</title>
+    <title>Intelligent Real-Time Cyberbullying Detection System</title>
     <style>{styles}</style>
 </head>
 <body>
     <main class="page-shell">
         <section class="app-card">
-            <h1>Tweet Analysis Interface</h1>
+            <h1>Intelligent Real-Time Cyberbullying Detection System</h1>
             <section class="info-card">
                 <div class="info-title">How This Detection Works</div>
                 <div class="info-text">The system labels a tweet as cyberbullying only when both conditions are present in the same text:</div>
@@ -190,7 +190,7 @@ def create_pipeline(dataset_path: Path, hurtlex_path: Path, target_path: Path) -
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Cyberbullying detection dashboard")
+    parser = argparse.ArgumentParser(description="Intelligent Real-Time Cyberbullying Detection System")
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=env_int("PORT", 8080))
     parser.add_argument("--dataset", default=str(env_or_default("DATASET_PATH", DEFAULT_DATASET)))
@@ -216,7 +216,7 @@ def main() -> None:
     AppHandler.setup_message = setup_message
     server = ThreadingHTTPServer((args.host, args.port), AppHandler)
     display_host = "127.0.0.1" if args.host == "0.0.0.0" else args.host
-    print(f"Cyberbullying dashboard running at http://{display_host}:{args.port}")
+    print(f"Intelligent Real-Time Cyberbullying Detection System running at http://{display_host}:{args.port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
