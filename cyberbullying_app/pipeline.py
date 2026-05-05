@@ -13,7 +13,22 @@ from xml.etree import ElementTree
 
 
 XLSX_NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-MODEL_VERSION = 1
+MODEL_VERSION = 2
+SAFE_REPLACEMENTS = {
+    "stupid": "mistaken",
+    "idiot": "person",
+    "dumb": "unclear",
+    "useless": "unhelpful",
+    "hate": "strongly dislike",
+    "ugly": "unpleasant",
+    "moron": "person",
+    "bitch": "person",
+    "whore": "person",
+    "fool": "person",
+    "loser": "person",
+    "trash": "unfair",
+    "kill": "harm",
+}
 
 
 class PipelineConfigError(RuntimeError):
@@ -38,6 +53,88 @@ def tokenize_text(text: str) -> List[str]:
     if not normalized:
         return []
     return [token for token in normalized.split() if token]
+
+
+def build_phrase_index(phrases: Sequence[str]) -> Dict[int, Set[str]]:
+    index: Dict[int, Set[str]] = {}
+    for phrase in phrases:
+        normalized = normalize_lookup_text(phrase)
+        if not normalized or normalized == "nan":
+            continue
+        size = len(normalized.split())
+        index.setdefault(size, set()).add(normalized)
+    return index
+
+
+def find_phrase_matches(text: str, phrase_index: Dict[int, Set[str]]) -> List[str]:
+    normalized = normalize_lookup_text(text)
+    tokens = normalized.split()
+    matches = set()
+
+    if not tokens:
+        return []
+
+    for phrase_length, phrases in phrase_index.items():
+        if phrase_length <= 0 or len(tokens) < phrase_length:
+            continue
+        for start in range(len(tokens) - phrase_length + 1):
+            candidate = " ".join(tokens[start : start + phrase_length])
+            if candidate in phrases:
+                matches.add(candidate)
+
+    return sorted(matches, key=lambda item: (len(item.split()), item))
+
+
+def read_target_words(path: Path) -> Set[str]:
+    words = set()
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            normalized = normalize_lookup_text(line.strip())
+            if normalized:
+                words.add(normalized)
+    return words
+
+
+def read_hurtlex(path: Path) -> Set[str]:
+    lexicon = set()
+    with path.open("r", encoding="utf-8") as handle:
+        header_line = handle.readline().rstrip("\n")
+        headers = header_line.split("\t") if header_line else []
+        lemma_index = 0
+        for index, name in enumerate(headers):
+            if name.strip().lower() == "lemma":
+                lemma_index = index
+                break
+
+        for line in handle:
+            cols = line.rstrip("\n").split("\t")
+            if lemma_index < len(cols):
+                normalized = normalize_lookup_text(cols[lemma_index].strip())
+                if normalized:
+                    lexicon.add(normalized)
+    return lexicon
+
+
+def soften_text(text: str, offensive_terms: Sequence[str]) -> str:
+    if not text.strip():
+        return ""
+
+    updated = text
+    replaced = False
+
+    for term in offensive_terms:
+        if term == "@mention":
+            continue
+        replacement = SAFE_REPLACEMENTS.get(term, "respectful wording")
+        pattern = re.compile(rf"(?i)\b{re.escape(term)}\b")
+        updated, count = pattern.subn(replacement, updated)
+        replaced = replaced or bool(count)
+
+    updated = re.sub(r"\s+", " ", updated).strip()
+    if replaced:
+        return updated
+
+    return "Please rewrite this message in a respectful and non-harmful way before posting."
 
 
 def sigmoid(value: float) -> float:
@@ -477,6 +574,10 @@ class CyberbullyingPipeline:
         self.model_cache_path = self.dataset_path.parent / "tfidf_logreg_model.json"
         self.vectorizer = TfidfVectorizer()
         self.classifier = LogisticRegressionClassifier()
+        self.lexicon_words: Set[str] = set()
+        self.target_words: Set[str] = set()
+        self.lexicon_index: Dict[int, Set[str]] = {}
+        self.target_index: Dict[int, Set[str]] = {}
         self.records: List[Dict[str, object]] = []
         self.status: Dict[str, object] = {}
         self.trained = False
@@ -496,6 +597,18 @@ class CyberbullyingPipeline:
             "size": stat.st_size,
             "mtime": stat.st_mtime,
         }
+
+    def _load_explainability_resources(self) -> None:
+        if self.lexicon_words and self.target_words:
+            return
+
+        self._validate_required_file(self.hurtlex_path, "HurtLex lexicon")
+        self._validate_required_file(self.target_path, "target indicators")
+
+        self.lexicon_words = read_hurtlex(self.hurtlex_path)
+        self.target_words = read_target_words(self.target_path)
+        self.lexicon_index = build_phrase_index(sorted(self.lexicon_words))
+        self.target_index = build_phrase_index(sorted(self.target_words))
 
     def _load_cache(self) -> bool:
         if not self.model_cache_path.exists():
@@ -590,11 +703,21 @@ class CyberbullyingPipeline:
 
     def analyze_text(self, text: str) -> Dict[str, object]:
         self.load()
+        self._load_explainability_resources()
         normalized = normalize_lookup_text(text)
         vector = self.vectorizer.transform_one(text)
         probability = self.classifier.predict_probability(vector) if vector else 0.0
         is_cyberbullying = probability >= 0.5
         confidence = probability if is_cyberbullying else (1.0 - probability)
+        risk_score = round(probability * 100, 2)
+        confidence_score = round(confidence, 2)
+
+        if risk_score >= 70:
+            risk_level = "High"
+        elif risk_score >= 35:
+            risk_level = "Medium"
+        else:
+            risk_level = "Low"
 
         top_tokens = []
         token_counts = Counter(tokenize_text(text))
@@ -602,14 +725,27 @@ class CyberbullyingPipeline:
             if token in self.vectorizer.vocabulary:
                 top_tokens.append(token)
 
+        hurtlex_matches = find_phrase_matches(text, self.lexicon_index)
+        target_matches = find_phrase_matches(text, self.target_index)
+        rule_triggered = bool(hurtlex_matches and target_matches)
+        safer_text = soften_text(text, hurtlex_matches) if is_cyberbullying else text.strip()
+
         return {
             "comment": text,
             "normalized_text": normalized,
             "active_tokens": top_tokens,
             "label": 1 if is_cyberbullying else 0,
             "probability": probability,
+            "risk_score": risk_score,
+            "risk_level": risk_level,
             "confidence": round(confidence * 100, 2),
-            "result_text": "Cyberbullying Detected" if is_cyberbullying else "Not Cyberbullying",
+            "confidence_score": confidence_score,
+            "hurtlex_matches": hurtlex_matches,
+            "target_matches": target_matches,
+            "rule_triggered": rule_triggered,
+            "warning_message": "This message may be harmful. Please revise before posting." if is_cyberbullying else "",
+            "safer_text": safer_text,
+            "result_text": "Cyberbullying Detected" if is_cyberbullying else "Safe Content",
         }
 
     def predict(self, comment: str) -> Dict[str, object]:
