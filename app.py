@@ -1,4 +1,4 @@
-import os, re, threading
+import os, re
 from flask import Flask, render_template, request, jsonify
 from cyberbullying_app.pipeline import CyberbullyingPipeline, soften_text
 
@@ -12,28 +12,11 @@ _pipeline = CyberbullyingPipeline(
     hurtlex_path=os.path.join(_BASE, 'data', 'hurtlex_EN.tsv'),
     target_path=os.path.join(_BASE, 'data', 'target_indicators.txt'),
 )
-_pipeline_lock = threading.Lock()
-_pipeline_ready = False
-
-
-def _ensure_pipeline():
-    global _pipeline_ready
-    if _pipeline_ready:
-        return
-    with _pipeline_lock:
-        if _pipeline_ready:
-            return
-        try:
-            _pipeline.load()
-            print("Pipeline loaded successfully.")
-        except Exception as e:
-            print(f"WARNING: Pipeline load error: {e}")
-        _pipeline_ready = True
-
-
-# Start loading in background so port binds immediately and pipeline
-# is ready before the first user request arrives.
-threading.Thread(target=_ensure_pipeline, daemon=True).start()
+try:
+    _pipeline.load()
+    print("Pipeline loaded successfully.")
+except Exception as e:
+    print(f"WARNING: Pipeline load error: {e}")
 
 # ── Highlighting helper ───────────────────────────────────────────────────────
 _MENTION_RE = re.compile(r'@\w+')
@@ -78,7 +61,6 @@ def analyze(text: str) -> dict:
     if not text:
         return {'error': 'Empty input.'}
 
-    _ensure_pipeline()
     result    = _pipeline.analyze_text(text)
     offensive = result['hurtlex_matches']
     targets   = result['target_matches']
