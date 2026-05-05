@@ -1,300 +1,56 @@
-import os, re, string
+import os, re
 from flask import Flask, render_template, request, jsonify
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
+from cyberbullying_app.pipeline import CyberbullyingPipeline, soften_text
 
 app = Flask(__name__)
 
-# ── NLTK bootstrap ──────────────────────────────────────────────────────────
-def _ensure_nltk():
-    needed = {
-        'tokenizers/punkt': 'punkt',
-        'tokenizers/punkt_tab': 'punkt_tab',
-        'corpora/stopwords': 'stopwords',
-        'corpora/wordnet': 'wordnet',
-    }
-    missing = []
-    for path, pkg in needed.items():
-        try:
-            nltk.data.find(path)
-        except (LookupError, OSError):
-            missing.append(pkg)
-    if missing:
-        print(f"INFO: NLTK packages missing: {missing}. Downloading in background...")
-        import threading
-        def _dl():
-            for pkg in missing:
-                try:
-                    nltk.download(pkg, quiet=True)
-                except Exception as e:
-                    print(f"WARNING: Could not download '{pkg}': {e}")
-        threading.Thread(target=_dl, daemon=True).start()
+# ── Pipeline initialisation ───────────────────────────────────────────────────
+_BASE = os.path.dirname(os.path.abspath(__file__))
 
-_ensure_nltk()
+_pipeline = CyberbullyingPipeline(
+    dataset_path=os.path.join(_BASE, 'data', 'dataset.csv'),
+    hurtlex_path=os.path.join(_BASE, 'data', 'hurtlex_EN.tsv'),
+    target_path=os.path.join(_BASE, 'data', 'target_indicators.txt'),
+)
 
-# ── HurtLex quality filters ──────────────────────────────────────────────────────────
-# Words that appear in HurtLex but are NOT offensive in everyday English
-_HURTLEX_EXCLUSIONS = {
-    'love', 'poor', 'kill', 'poor', 'pretentious', 'barbarian', 'die',
-    'minister', 'accountant', 'diplomat', 'counselor', 'auditor',
-}
-
-# Categories in HurtLex that are too broad / produce false positives
-_SKIP_CATEGORIES = {'pa'}  # professional activities — not offensive
-
-# Common bullying/hate words missing from HurtLex — manually curated
-_EXTRA_OFFENSIVE = {
-    # direct hostility
-    'hate', 'despise', 'detest', 'loathe',
-    # body shaming
-    'fat', 'ugly', 'hideous', 'disgusting', 'gross',
-    # social rejection
-    'loser', 'weirdo', 'freak', 'weirdo', 'outcast', 'loner',
-    # intelligence attacks
-    'brainless', 'clueless', 'dimwit', 'dunce', 'imbecile',
-    # worthlessness
-    'worthless', 'useless', 'pathetic', 'hopeless', 'failure',
-    # violence/threat
-    'kill', 'hurt', 'attack', 'destroy', 'ruin',
-    # general insults often used in bullying
-    'trash', 'garbage', 'pig', 'rat', 'snake',
-}
-
-# ── Globals ──────────────────────────────────────────────────────────────────────────
-hurtlex_tokens  = set()   # single-word lemmas
-hurtlex_phrases = []      # multi-word lemmas (sorted longest-first)
-target_set      = set()   # single-word target indicators
-target_phrases  = []      # multi-word target indicators
 try:
-    _lemmatizer = WordNetLemmatizer()
-except Exception:
-    _lemmatizer = None
-try:
-    _stop_words = set(stopwords.words('english'))
-except Exception:
-    _stop_words = set()
+    _pipeline.load()
+    print("Pipeline loaded successfully.")
+except Exception as e:
+    print(f"WARNING: Pipeline load error: {e}")
 
-# ── Resource loading ─────────────────────────────────────────────────────────────────
-def _find(filename, subdirs=('data',)):
-    """Return the first existing path for filename, checking subdirs then root."""
-    for sub in subdirs:
-        p = os.path.join(sub, filename)
-        if os.path.exists(p):
-            return p
-    if os.path.exists(filename):
-        return filename
-    return None
-
-
-def _load_hurtlex():
-    global hurtlex_tokens, hurtlex_phrases
-    path = _find('hurtlex_EN.tsv')
-    if not path:
-        print("WARNING: hurtlex_EN.tsv not found. Using extra offensive list only.")
-        hurtlex_tokens.update(_EXTRA_OFFENSIVE)
-        return
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-        # Skip header line
-        for line in lines[1:]:
-            parts = line.strip().split('\t')
-            if len(parts) < 4:
-                continue
-            lemma = parts[3].lower().strip()
-            if not lemma or lemma in _HURTLEX_EXCLUSIONS:
-                continue
-            if parts[1] in _SKIP_CATEGORIES:
-                continue
-            if ' ' in lemma:
-                hurtlex_phrases.append(lemma)
-            else:
-                hurtlex_tokens.add(lemma)
-        # Merge supplementary offensive words
-        hurtlex_tokens.update(_EXTRA_OFFENSIVE)
-        hurtlex_phrases.sort(key=len, reverse=True)
-        print(f"HurtLex loaded: {len(hurtlex_tokens)} tokens, {len(hurtlex_phrases)} phrases.")
-    except Exception as e:
-        print(f"WARNING: hurtlex load error: {e}")
-
-
-def _load_targets():
-    global target_set, target_phrases
-    path = _find('target_indicators.txt')
-    if not path:
-        # Fallback minimal set
-        target_set = {'you','your','yours','yourself','u','ur','ye','ya',
-                      'bro','dude','man','buddy','pal','friend','kid','son',
-                      'mate','homie','fam','sister','brother','girl','boy',
-                      'lady','sir','mister','miss','yall','yous'}
-        print("WARNING: target_indicators.txt not found – using built-in fallback.")
-        return
-    try:
-        with open(path, encoding='utf-8') as f:
-            items = [ln.strip().lower() for ln in f if ln.strip()]
-        for item in items:
-            if ' ' in item:
-                target_phrases.append(item)
-            else:
-                target_set.add(item)
-        target_phrases.sort(key=len, reverse=True)
-        print(f"Target indicators loaded: {len(target_set)} tokens, {len(target_phrases)} phrases.")
-    except Exception as e:
-        print(f"WARNING: target load error: {e}")
-
-
-_load_hurtlex()
-_load_targets()
-
-# ── Text preprocessing ───────────────────────────────────────────────────────
-_URL_RE   = re.compile(r'https?://\S+|www\.\S+')
-_HASH_RE  = re.compile(r'#\w+')
-_EMOJI_RE = re.compile(
-    "["
-    u"\U0001F600-\U0001F64F"
-    u"\U0001F300-\U0001F5FF"
-    u"\U0001F680-\U0001F9FF"
-    u"☀-➿"
-    "]+", flags=re.UNICODE)
+# ── Highlighting helper ───────────────────────────────────────────────────────
 _MENTION_RE = re.compile(r'@\w+')
 
 
-def preprocess(text: str):
-    """Return (clean_text, tokens) after full NLP pipeline."""
-    t = text.lower()
-    t = _URL_RE.sub(' ', t)
-    t = _HASH_RE.sub(' ', t)
-    t = _EMOJI_RE.sub(' ', t)
-    t = t.encode('ascii', 'ignore').decode('ascii')
-    t = re.sub(r'[^a-z0-9\s]', ' ', t)
-    t = re.sub(r'\d+', ' ', t)
-    t = ' '.join(t.split())
-
-    try:
-        toks = word_tokenize(t)
-    except Exception:
-        toks = t.split()
-
-    # Remove stopwords but keep target-indicator words (pronouns etc.)
-    _keep = {'you', 'your', 'yours', 'yourself', 'ye', 'u', 'ur'}
-    toks = [tk for tk in toks if tk not in _stop_words or tk in _keep]
-    if _lemmatizer is not None:
-        try:
-            toks = [_lemmatizer.lemmatize(tk) for tk in toks]
-        except Exception:
-            pass
-    return t, toks
-
-
-# ── Detection helpers ─────────────────────────────────────────────────────────
-def _find_mentions(original: str):
-    """Return list of @username mentions found in original text."""
-    return _MENTION_RE.findall(original)
-
-
-def _find_targets(original: str):
-    """Find all target indicators (@ mentions + words/phrases) in original text."""
-    found = set()
-
-    # 1. @username always counts
-    for m in _find_mentions(original):
-        found.add(m)
-
-    low = original.lower()
-
-    # 2. Multi-word target phrases (longest first)
-    for phrase in target_phrases:
-        if re.search(r'\b' + re.escape(phrase) + r'\b', low):
-            found.add(phrase)
-
-    # 3. Single-word tokens
-    words = re.findall(r"[a-z']+", low)
-    for w in words:
-        if w in target_set:
-            found.add(w)
-
-    return sorted(found)
-
-
-def _find_offensive(tokens, clean_text: str):
-    """Find HurtLex offensive words/phrases in preprocessed tokens & clean text."""
-    found = set()
-
-    # Multi-word HurtLex phrases in clean text (longest first)
-    for phrase in hurtlex_phrases:
-        if re.search(r'\b' + re.escape(phrase) + r'\b', clean_text):
-            found.add(phrase)
-
-    # Single-word tokens
-    for tk in tokens:
-        if tk in hurtlex_tokens:
-            found.add(tk)
-
-    return sorted(found)
-
-
-def _compute_risk(offensive, targets, clean_text):
-    """Compute final risk score using rules only (no ML)."""
-    has_off = len(offensive) > 0
-    has_tgt = len(targets)  > 0
-
-    # Rule-based scoring
-    if has_off and has_tgt:
-        rule_score = min(0.70 + 0.04 * len(offensive) + 0.03 * len(targets), 1.0)
-    elif has_off:
-        rule_score = 0.30
-    elif has_tgt:
-        rule_score = 0.10
-    else:
-        rule_score = 0.05
-
-    return rule_score
-
-
-def _risk_level(score):
-    if score >= 0.60:
-        return 'High'
-    if score >= 0.30:
-        return 'Medium'
-    return 'Low'
-
-
-def _highlight_original(original, offensive, targets):
-    """Return HTML with offensive words in red, target indicators in blue."""
+def _highlight(original, offensive, targets):
     s = original
 
-    # Highlight mentions
     s = _MENTION_RE.sub(
         lambda m: f'<mark class="target-mark">{m.group()}</mark>', s)
 
-    # Highlight multi-word target phrases
     for phrase in sorted(targets, key=len, reverse=True):
         if ' ' in phrase:
             s = re.sub(r'\b' + re.escape(phrase) + r'\b',
                        f'<mark class="target-mark">{phrase}</mark>', s,
                        flags=re.IGNORECASE)
 
-    # Highlight offensive phrases
     for phrase in sorted(offensive, key=len, reverse=True):
         if ' ' in phrase:
             s = re.sub(r'\b' + re.escape(phrase) + r'\b',
                        f'<mark class="offensive-mark">{phrase}</mark>', s,
                        flags=re.IGNORECASE)
 
-    # Highlight single-word targets
     for tgt in targets:
         if ' ' not in tgt and not tgt.startswith('@'):
             s = re.sub(r'\b' + re.escape(tgt) + r'\b',
-                       f'<mark class="target-mark">\\g<0></mark>', s,
+                       r'<mark class="target-mark">\g<0></mark>', s,
                        flags=re.IGNORECASE)
 
-    # Highlight single-word offensive
     for w in offensive:
         if ' ' not in w:
             s = re.sub(r'\b' + re.escape(w) + r'\b',
-                       f'<mark class="offensive-mark">\\g<0></mark>', s,
+                       r'<mark class="offensive-mark">\g<0></mark>', s,
                        flags=re.IGNORECASE)
 
     return s
@@ -306,60 +62,48 @@ def analyze(text: str) -> dict:
     if not text:
         return {'error': 'Empty input.'}
 
-    # Step 1 – target detection on RAW text
-    targets   = _find_targets(text)
+    result    = _pipeline.analyze_text(text)
+    offensive = result['hurtlex_matches']
+    targets   = result['target_matches']
+    prob      = result['probability']
+    risk_level = result['risk_level']
+    risk_pct   = int(round(prob * 100))
 
-    # Step 2 – preprocess
-    clean, tokens = preprocess(text)
+    rule_triggered   = bool(offensive and targets)
+    is_cyberbullying = bool(offensive)   # offensive word alone is sufficient to flag
 
-    # Step 3 – HurtLex matching
-    offensive = _find_offensive(tokens, clean)
-
-    # Step 4 – rule
-    rule_triggered   = bool(offensive) and bool(targets)
-    is_cyberbullying = bool(offensive)  # offensive alone is sufficient
-
-    # Step 5 – scores (rules only)
-    risk_score  = _compute_risk(offensive, targets, clean)
-    risk_pct    = int(round(risk_score * 100))
-    risk_level  = _risk_level(risk_score)
-    confidence  = round(risk_score, 4)
-
-    # Step 6 – presentation
     if is_cyberbullying:
-        detection_result = 'Cyberbullying Detected'
-        warning  = 'This message may be harmful. Please revise before posting.'
+        highlighted = _highlight(text, offensive, targets)
+        safer       = soften_text(text, offensive)
+        warning     = 'This message may be harmful. Please revise before posting.'
         if offensive and targets:
             explanation = (f'Offensive word(s) detected: {", ".join(offensive)}. '
                            f'Target indicator(s) found: {", ".join(targets)}.')
         else:
             explanation = f'Offensive word(s) detected: {", ".join(offensive)}.'
-        highlighted  = _highlight_original(text, offensive, targets)
-        safer_text   = ''
     else:
-        detection_result = 'Safe Content'
-        warning     = ''
         highlighted = text
-        safer_text  = ''
-        if targets and not offensive:
+        safer       = ''
+        warning     = ''
+        if targets:
             explanation = 'A person was addressed, but no offensive language was found.'
         else:
             explanation = 'No offensive language or direct targeting detected.'
 
     return {
-        'detection_result': detection_result,
-        'is_cyberbullying': is_cyberbullying,
+        'detection_result':   'Cyberbullying Detected' if is_cyberbullying else 'Safe Content',
+        'is_cyberbullying':   is_cyberbullying,
         'risk_score_percent': risk_pct,
-        'risk_score':        round(risk_score, 4),
-        'risk_level':        risk_level,
-        'confidence_score':  confidence,
-        'offensive_words':   offensive,
-        'target_indicators': targets,
-        'rule_triggered':    rule_triggered,
-        'warning':           warning,
-        'explanation':       explanation,
-        'highlighted_text':  highlighted,
-        'safer_text':        safer_text,
+        'risk_score':         round(prob, 4),
+        'risk_level':         risk_level,
+        'confidence_score':   round(prob, 4),
+        'offensive_words':    offensive,
+        'target_indicators':  targets,
+        'rule_triggered':     rule_triggered,
+        'warning':            warning,
+        'explanation':        explanation,
+        'highlighted_text':   highlighted,
+        'safer_text':         safer,
     }
 
 
