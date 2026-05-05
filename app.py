@@ -1,10 +1,10 @@
-import os, re
+import os, re, threading
 from flask import Flask, render_template, request, jsonify
 from cyberbullying_app.pipeline import CyberbullyingPipeline, soften_text
 
 app = Flask(__name__)
 
-# ── Pipeline initialisation ───────────────────────────────────────────────────
+# ── Pipeline initialisation (lazy — loads on first request) ──────────────────
 _BASE = os.path.dirname(os.path.abspath(__file__))
 
 _pipeline = CyberbullyingPipeline(
@@ -12,12 +12,23 @@ _pipeline = CyberbullyingPipeline(
     hurtlex_path=os.path.join(_BASE, 'data', 'hurtlex_EN.tsv'),
     target_path=os.path.join(_BASE, 'data', 'target_indicators.txt'),
 )
+_pipeline_lock = threading.Lock()
+_pipeline_ready = False
 
-try:
-    _pipeline.load()
-    print("Pipeline loaded successfully.")
-except Exception as e:
-    print(f"WARNING: Pipeline load error: {e}")
+
+def _ensure_pipeline():
+    global _pipeline_ready
+    if _pipeline_ready:
+        return
+    with _pipeline_lock:
+        if _pipeline_ready:
+            return
+        try:
+            _pipeline.load()
+            print("Pipeline loaded successfully.")
+        except Exception as e:
+            print(f"WARNING: Pipeline load error: {e}")
+        _pipeline_ready = True
 
 # ── Highlighting helper ───────────────────────────────────────────────────────
 _MENTION_RE = re.compile(r'@\w+')
@@ -62,6 +73,7 @@ def analyze(text: str) -> dict:
     if not text:
         return {'error': 'Empty input.'}
 
+    _ensure_pipeline()
     result    = _pipeline.analyze_text(text)
     offensive = result['hurtlex_matches']
     targets   = result['target_matches']
@@ -70,7 +82,8 @@ def analyze(text: str) -> dict:
     risk_pct   = int(round(prob * 100))
 
     rule_triggered   = bool(offensive and targets)
-    is_cyberbullying = bool(offensive)   # offensive word alone is sufficient to flag
+    # ML probability is the primary signal; avoids HurtLex lemmatizer false positives
+    is_cyberbullying = prob >= 0.5
 
     if is_cyberbullying:
         highlighted = _highlight(text, offensive, targets)
