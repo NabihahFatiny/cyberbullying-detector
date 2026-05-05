@@ -13,9 +13,9 @@ from xml.etree import ElementTree
 
 
 XLSX_NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-MODEL_VERSION = 2
+MODEL_VERSION = 5
 SAFE_REPLACEMENTS = {
-    "stupid": "mistaken",
+    "stupid": "thoughtless",
     "idiot": "person",
     "dumb": "unclear",
     "useless": "unhelpful",
@@ -29,36 +29,185 @@ SAFE_REPLACEMENTS = {
     "trash": "unfair",
     "kill": "harm",
 }
+STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "as",
+    "at",
+    "be",
+    "been",
+    "being",
+    "but",
+    "by",
+    "for",
+    "from",
+    "had",
+    "has",
+    "have",
+    "he",
+    "her",
+    "hers",
+    "him",
+    "his",
+    "i",
+    "if",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "me",
+    "my",
+    "of",
+    "on",
+    "or",
+    "our",
+    "ours",
+    "she",
+    "so",
+    "than",
+    "that",
+    "the",
+    "their",
+    "them",
+    "they",
+    "this",
+    "those",
+    "to",
+    "was",
+    "we",
+    "were",
+    "what",
+    "when",
+    "where",
+    "which",
+    "while",
+    "who",
+    "whom",
+    "why",
+    "with",
+}
+IRREGULAR_LEMMAS = {
+    "am": "be",
+    "are": "be",
+    "is": "be",
+    "was": "be",
+    "were": "be",
+    "has": "have",
+    "had": "have",
+    "does": "do",
+    "did": "do",
+}
 
 
 class PipelineConfigError(RuntimeError):
     """Raised when deployment-time data files are missing or invalid."""
 
 
-def normalize_lookup_text(text: str) -> str:
-    if text is None:
-        return ""
-    text = str(text).lower()
-    text = re.sub(r"http\S+|www\S+", " ", text)
-    text = re.sub(r"@\w+", " @mention ", text)
-    text = text.replace("#", " ")
-    text = re.sub(r"\d+", " ", text)
-    text = re.sub(r"[^a-z\s@']", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+def unique_in_order(items: Sequence[str]) -> List[str]:
+    seen: Set[str] = set()
+    ordered: List[str] = []
+    for item in items:
+        normalized = str(item).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+    return ordered
 
 
-def tokenize_text(text: str) -> List[str]:
-    normalized = normalize_lookup_text(text)
-    if not normalized:
+def lemmatize_token(token: str) -> str:
+    if not token:
+        return token
+    if token in IRREGULAR_LEMMAS:
+        return IRREGULAR_LEMMAS[token]
+    if len(token) > 4 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if len(token) > 4 and token.endswith("ing"):
+        base = token[:-3]
+        return base[:-1] if len(base) > 2 and base[-1] == base[-2] else base
+    if len(token) > 3 and token.endswith("ed"):
+        base = token[:-2]
+        return base[:-1] if len(base) > 2 and base[-1] == base[-2] else base
+    if len(token) > 3 and token.endswith("es"):
+        return token[:-2]
+    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
+def clean_and_tokenize(
+    text: str,
+    *,
+    remove_stopwords: bool,
+    lemmatize: bool,
+) -> List[str]:
+    normalized = "" if text is None else str(text).lower()
+    normalized = re.sub(r"http\S+|www\S+", " ", normalized)
+    normalized = re.sub(r"#\w+", " ", normalized)
+    normalized = re.sub(r"@\w+", " ", normalized)
+    normalized = re.sub(r"[^\x00-\x7F]+", " ", normalized)
+    normalized = re.sub(r"\d+", " ", normalized)
+    normalized = re.sub(r"[^a-z\s]", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+
+    tokens = [token for token in normalized.split() if token]
+    if not tokens:
         return []
-    return [token for token in normalized.split() if token]
+
+    processed: List[str] = []
+    for token in tokens:
+        if remove_stopwords and token in STOPWORDS:
+            continue
+        value = lemmatize_token(token) if lemmatize else token
+        if remove_stopwords and value in STOPWORDS:
+            continue
+        if value:
+            processed.append(value)
+    return processed
 
 
-def build_phrase_index(phrases: Sequence[str]) -> Dict[int, Set[str]]:
+def preprocess_text(text: str) -> Dict[str, object]:
+    raw_text = "" if text is None else str(text)
+    lowered = raw_text.lower()
+    username_mentions = unique_in_order(re.findall(r"@\w+", lowered))
+    feature_tokens = clean_and_tokenize(raw_text, remove_stopwords=True, lemmatize=True)
+    surface_tokens = clean_and_tokenize(raw_text, remove_stopwords=False, lemmatize=False)
+    hurtlex_tokens = clean_and_tokenize(raw_text, remove_stopwords=False, lemmatize=True)
+
+    return {
+        "raw_text": raw_text,
+        "username_mentions": username_mentions,
+        "cleaned_text": " ".join(feature_tokens),
+        "feature_tokens": feature_tokens,
+        "surface_tokens": surface_tokens,
+        "hurtlex_tokens": hurtlex_tokens,
+        "target_tokens": surface_tokens,
+    }
+
+
+def tokenize_feature_text(text: str) -> List[str]:
+    return list(preprocess_text(text)["feature_tokens"])
+
+
+def tokenize_text_with_spans(text: str) -> List[Tuple[str, int, int]]:
+    source = "" if text is None else str(text)
+    tokens: List[Tuple[str, int, int]] = []
+    for match in re.finditer(r"[A-Za-z]+", source):
+        tokens.append((match.group(0).lower(), match.start(), match.end()))
+    return tokens
+
+
+def normalize_phrase(text: str, *, lemmatize: bool) -> str:
+    tokens = clean_and_tokenize(text, remove_stopwords=False, lemmatize=lemmatize)
+    return " ".join(tokens).strip()
+
+
+def build_phrase_index(phrases: Sequence[str], *, lemmatize: bool) -> Dict[int, Set[str]]:
     index: Dict[int, Set[str]] = {}
     for phrase in phrases:
-        normalized = normalize_lookup_text(phrase)
+        normalized = normalize_phrase(phrase, lemmatize=lemmatize)
         if not normalized or normalized == "nan":
             continue
         size = len(normalized.split())
@@ -66,30 +215,81 @@ def build_phrase_index(phrases: Sequence[str]) -> Dict[int, Set[str]]:
     return index
 
 
-def find_phrase_matches(text: str, phrase_index: Dict[int, Set[str]]) -> List[str]:
-    normalized = normalize_lookup_text(text)
-    tokens = normalized.split()
-    matches = set()
-
+def find_phrase_matches_from_tokens(tokens: Sequence[str], phrase_index: Dict[int, Set[str]]) -> List[str]:
     if not tokens:
         return []
 
-    for phrase_length, phrases in phrase_index.items():
-        if phrase_length <= 0 or len(tokens) < phrase_length:
-            continue
-        for start in range(len(tokens) - phrase_length + 1):
+    matches: List[str] = []
+    seen: Set[str] = set()
+    lengths = sorted(phrase_index, reverse=True)
+    start = 0
+    token_count = len(tokens)
+
+    while start < token_count:
+        matched = False
+        for phrase_length in lengths:
+            phrases = phrase_index[phrase_length]
+            if phrase_length <= 0 or start + phrase_length > token_count:
+                continue
             candidate = " ".join(tokens[start : start + phrase_length])
             if candidate in phrases:
-                matches.add(candidate)
+                if candidate not in seen:
+                    seen.add(candidate)
+                    matches.append(candidate)
+                start += phrase_length
+                matched = True
+                break
+        if not matched:
+            start += 1
 
-    return sorted(matches, key=lambda item: (len(item.split()), item))
+    return matches
+
+
+def recover_surface_phrase_matches(text: str, matches: Sequence[str], *, lemmatize: bool) -> List[str]:
+    if not matches:
+        return []
+
+    token_spans = tokenize_text_with_spans(text)
+    if not token_spans:
+        return []
+
+    raw_tokens = [token for token, _start, _end in token_spans]
+    compare_tokens = [lemmatize_token(token) if lemmatize else token for token in raw_tokens]
+    source = "" if text is None else str(text)
+    recovered: List[str] = []
+    seen: Set[str] = set()
+
+    for phrase in matches:
+        phrase_tokens = phrase.split()
+        phrase_length = len(phrase_tokens)
+        if phrase_length <= 0 or phrase_length > len(compare_tokens):
+            continue
+        for start in range(len(compare_tokens) - phrase_length + 1):
+            candidate = compare_tokens[start : start + phrase_length]
+            if candidate != phrase_tokens:
+                continue
+            start_pos = token_spans[start][1]
+            end_pos = token_spans[start + phrase_length - 1][2]
+            surface = source[start_pos:end_pos].strip()
+            key = surface.lower()
+            if surface and key not in seen:
+                seen.add(key)
+                recovered.append(surface)
+            break
+
+    return recovered
 
 
 def read_target_words(path: Path) -> Set[str]:
     words = set()
     with path.open("r", encoding="utf-8") as handle:
         for line in handle:
-            normalized = normalize_lookup_text(line.strip())
+            raw_value = line.strip()
+            if not raw_value:
+                continue
+            if raw_value.startswith("@"):
+                continue
+            normalized = normalize_phrase(raw_value, lemmatize=False)
             if normalized:
                 words.add(normalized)
     return words
@@ -99,42 +299,48 @@ def read_hurtlex(path: Path) -> Set[str]:
     lexicon = set()
     with path.open("r", encoding="utf-8") as handle:
         header_line = handle.readline().rstrip("\n")
-        headers = header_line.split("\t") if header_line else []
-        lemma_index = 0
-        for index, name in enumerate(headers):
-            if name.strip().lower() == "lemma":
-                lemma_index = index
+        headers = [item.strip().lower() for item in header_line.split("\t")] if header_line else []
+        lemma_index = None
+        for column_name in ("lemma", "term"):
+            if column_name in headers:
+                lemma_index = headers.index(column_name)
                 break
+        if lemma_index is None:
+            lemma_index = 0
 
         for line in handle:
             cols = line.rstrip("\n").split("\t")
-            if lemma_index < len(cols):
-                normalized = normalize_lookup_text(cols[lemma_index].strip())
-                if normalized:
-                    lexicon.add(normalized)
+            if lemma_index >= len(cols):
+                continue
+            normalized = normalize_phrase(cols[lemma_index].strip(), lemmatize=True)
+            if normalized:
+                lexicon.add(normalized)
     return lexicon
 
 
 def soften_text(text: str, offensive_terms: Sequence[str]) -> str:
-    if not text.strip():
+    updated = "" if text is None else str(text).strip()
+    if not updated:
         return ""
 
-    updated = text
     replaced = False
-
     for term in offensive_terms:
-        if term == "@mention":
-            continue
-        replacement = SAFE_REPLACEMENTS.get(term, "respectful wording")
-        pattern = re.compile(rf"(?i)\b{re.escape(term)}\b")
+        replacement = SAFE_REPLACEMENTS.get(term.lower(), "respectful wording")
+        escaped = re.escape(term).replace(r"\ ", r"\s+")
+        pattern = re.compile(rf"(?i)(?<!\w){escaped}(?!\w)")
         updated, count = pattern.subn(replacement, updated)
         replaced = replaced or bool(count)
 
     updated = re.sub(r"\s+", " ", updated).strip()
     if replaced:
         return updated
+    return "Please rewrite this message in a respectful and constructive way before posting."
 
-    return "Please rewrite this message in a respectful and non-harmful way before posting."
+
+def format_match_text(items: Sequence[str], empty_message: str) -> str:
+    if not items:
+        return empty_message
+    return ", ".join(items)
 
 
 def sigmoid(value: float) -> float:
@@ -252,9 +458,7 @@ def read_dataset_rows(path: Path) -> List[Dict[str, str]]:
         return read_csv_rows(path)
     if suffix == ".xlsx":
         return read_xlsx_rows(path)
-    raise PipelineConfigError(
-        f"Unsupported dataset format: {path}. Use a .csv or .xlsx dataset file."
-    )
+    raise PipelineConfigError("Unsupported dataset format. Use a .csv or .xlsx dataset file.")
 
 
 def detect_text_column(headers: Iterable[str]) -> Optional[str]:
@@ -274,106 +478,82 @@ def detect_text_column(headers: Iterable[str]) -> Optional[str]:
     return None
 
 
-def detect_label_column(headers: Iterable[str]) -> Optional[str]:
-    candidates = [
-        "label",
-        "cyberbullying_type",
-        "cyberbullying",
-        "class",
-        "category",
-        "target",
-        "is_cyberbullying",
-    ]
-    header_set = list(headers)
-    for candidate in candidates:
-        if candidate in header_set:
-            return candidate
-    return None
+def build_rule_label(
+    text: str,
+    lexicon_index: Dict[int, Set[str]],
+    lexicon_surface_index: Dict[int, Set[str]],
+    target_index: Dict[int, Set[str]],
+) -> Tuple[int, List[str], List[str]]:
+    preprocessed = preprocess_text(text)
+    hurtlex_surface_matches = find_phrase_matches_from_tokens(
+        list(preprocessed["surface_tokens"]),
+        lexicon_surface_index,
+    )
+    hurtlex_lemma_matches = find_phrase_matches_from_tokens(
+        list(preprocessed["hurtlex_tokens"]),
+        lexicon_index,
+    )
+    hurtlex_matches = hurtlex_surface_matches or hurtlex_lemma_matches
+    target_indicator_matches = find_phrase_matches_from_tokens(
+        list(preprocessed["target_tokens"]),
+        target_index,
+    )
+    target_matches = unique_in_order(target_indicator_matches + list(preprocessed["username_mentions"]))
+    label = 1 if hurtlex_matches and target_matches else 0
+    return label, hurtlex_matches, target_matches
 
 
-def normalize_binary_label(raw_value: object) -> Optional[int]:
-    text = str(raw_value or "").strip().lower()
-    if not text:
-        return None
-
-    negative_labels = {
-        "0",
-        "false",
-        "no",
-        "negative",
-        "not_cyberbullying",
-        "not cyberbullying",
-        "non_cyberbullying",
-        "non-cyberbullying",
-        "none",
-        "safe",
-    }
-    positive_labels = {
-        "1",
-        "true",
-        "yes",
-        "positive",
-        "cyberbullying",
-        "cyber_bullying",
-        "bullying",
-        "abusive",
-    }
-
-    if text in negative_labels:
-        return 0
-    if text in positive_labels:
-        return 1
-
-    try:
-        numeric = float(text)
-    except ValueError:
-        numeric = None
-    if numeric is not None:
-        if numeric <= 0:
-            return 0
-        if numeric >= 1:
-            return 1
-
-    if "not" in text and "cyber" in text:
-        return 0
-
-    return 1
-
-
-def prepare_labeled_rows(rows: Sequence[Dict[str, str]]) -> Tuple[List[Dict[str, object]], str, str]:
+def prepare_training_rows(
+    rows: Sequence[Dict[str, str]],
+    lexicon_index: Dict[int, Set[str]],
+    lexicon_surface_index: Dict[int, Set[str]],
+    target_index: Dict[int, Set[str]],
+) -> Tuple[List[Dict[str, object]], str]:
     if not rows:
-        raise PipelineConfigError("The dataset is empty, so the TF-IDF model cannot be trained.")
+        raise PipelineConfigError("The dataset is empty, so the model cannot be trained.")
 
     text_column = detect_text_column(rows[0].keys())
-    label_column = detect_label_column(rows[0].keys())
-    if not text_column or not label_column:
+    if not text_column:
         raise PipelineConfigError(
-            "The dataset must include a text column (for example comment or tweet_text) "
-            "and a label column (for example label or cyberbullying_type)."
+            "The dataset must include a text column such as comment, tweet_text, tweet, text, content, or message."
         )
 
     prepared: List[Dict[str, object]] = []
     for row in rows:
         text = str(row.get(text_column, "") or "").strip()
-        label = normalize_binary_label(row.get(label_column, ""))
-        if not text or label is None:
+        if not text:
             continue
+        preprocessed = preprocess_text(text)
+        cleaned_text = str(preprocessed["cleaned_text"]).strip()
+        if not cleaned_text:
+            continue
+        label, hurtlex_matches, target_matches = build_rule_label(
+            text,
+            lexicon_index,
+            lexicon_surface_index,
+            target_index,
+        )
         prepared.append(
             {
                 "comment": text,
+                "cleaned_text": cleaned_text,
                 "label": label,
+                "hurtlex_matches": hurtlex_matches,
+                "target_matches": target_matches,
             }
         )
 
     if len(prepared) < 10:
-        raise PipelineConfigError("The dataset does not contain enough labeled rows to train the model.")
+        raise PipelineConfigError("The dataset does not contain enough usable text rows to train the model.")
 
     positives = sum(int(item["label"]) for item in prepared)
     negatives = len(prepared) - positives
     if positives == 0 or negatives == 0:
-        raise PipelineConfigError("The dataset needs both cyberbullying and non-cyberbullying examples.")
+        raise PipelineConfigError(
+            "Pseudo-labeling produced only one class. Check the dataset content and supporting lexicon files."
+        )
 
-    return prepared, text_column, label_column
+    return prepared, text_column
 
 
 class TfidfVectorizer:
@@ -389,7 +569,7 @@ class TfidfVectorizer:
         total_documents = len(documents)
 
         for document in documents:
-            tokens = tokenize_text(document)
+            tokens = tokenize_feature_text(document)
             if not tokens:
                 continue
             unique_tokens = set(tokens)
@@ -413,7 +593,7 @@ class TfidfVectorizer:
 
     def transform_one(self, document: str) -> Dict[int, float]:
         counts: Dict[int, int] = {}
-        for token in tokenize_text(document):
+        for token in tokenize_feature_text(document):
             index = self.vocabulary.get(token)
             if index is None:
                 continue
@@ -523,7 +703,11 @@ class LogisticRegressionClassifier:
         return instance
 
 
-def split_dataset(rows: Sequence[Dict[str, object]], test_ratio: float = 0.2, seed: int = 42) -> Tuple[List[Dict[str, object]], List[Dict[str, object]]]:
+def split_dataset(
+    rows: Sequence[Dict[str, object]],
+    test_ratio: float = 0.2,
+    seed: int = 42,
+) -> Tuple[List[Dict[str, object]], List[Dict[str, object]]]:
     indices = list(range(len(rows)))
     random.Random(seed).shuffle(indices)
     test_size = max(1, int(len(rows) * test_ratio))
@@ -577,18 +761,15 @@ class CyberbullyingPipeline:
         self.lexicon_words: Set[str] = set()
         self.target_words: Set[str] = set()
         self.lexicon_index: Dict[int, Set[str]] = {}
+        self.lexicon_surface_index: Dict[int, Set[str]] = {}
         self.target_index: Dict[int, Set[str]] = {}
-        self.records: List[Dict[str, object]] = []
         self.status: Dict[str, object] = {}
         self.trained = False
 
     def _validate_required_file(self, path: Path, label: str) -> None:
         if path.exists() and path.is_file():
             return
-        raise PipelineConfigError(
-            f"Missing required {label} file: {path}. "
-            f"Add the file to the repo or set the matching environment variable."
-        )
+        raise PipelineConfigError(f"Missing required {label} file.")
 
     def _dataset_signature(self) -> Dict[str, object]:
         stat = self.dataset_path.stat()
@@ -598,17 +779,18 @@ class CyberbullyingPipeline:
             "mtime": stat.st_mtime,
         }
 
-    def _load_explainability_resources(self) -> None:
+    def _load_rule_resources(self) -> None:
         if self.lexicon_words and self.target_words:
             return
 
-        self._validate_required_file(self.hurtlex_path, "HurtLex lexicon")
-        self._validate_required_file(self.target_path, "target indicators")
+        self._validate_required_file(self.hurtlex_path, "HurtLex")
+        self._validate_required_file(self.target_path, "target indicator")
 
         self.lexicon_words = read_hurtlex(self.hurtlex_path)
         self.target_words = read_target_words(self.target_path)
-        self.lexicon_index = build_phrase_index(sorted(self.lexicon_words))
-        self.target_index = build_phrase_index(sorted(self.target_words))
+        self.lexicon_index = build_phrase_index(sorted(self.lexicon_words), lemmatize=True)
+        self.lexicon_surface_index = build_phrase_index(sorted(self.lexicon_words), lemmatize=False)
+        self.target_index = build_phrase_index(sorted(self.target_words), lemmatize=False)
 
     def _load_cache(self) -> bool:
         if not self.model_cache_path.exists():
@@ -626,7 +808,6 @@ class CyberbullyingPipeline:
 
         self.vectorizer = TfidfVectorizer.from_dict(dict(payload.get("vectorizer", {})))
         self.classifier = LogisticRegressionClassifier.from_dict(dict(payload.get("classifier", {})))
-        self.records = list(payload.get("records_preview", []))
         self.status = dict(payload.get("status", {}))
         self.status["model_cached"] = True
         self.trained = True
@@ -638,20 +819,26 @@ class CyberbullyingPipeline:
             "dataset_signature": self._dataset_signature(),
             "vectorizer": self.vectorizer.to_dict(),
             "classifier": self.classifier.to_dict(),
-            "records_preview": self.records[:200],
             "status": self.status,
         }
         self.model_cache_path.write_text(json.dumps(payload), encoding="utf-8")
 
     def _train_model(self) -> None:
         self._validate_required_file(self.dataset_path, "dataset")
+        self._load_rule_resources()
+
         rows = read_dataset_rows(self.dataset_path)
-        prepared, text_column, label_column = prepare_labeled_rows(rows)
+        prepared, text_column = prepare_training_rows(
+            rows,
+            self.lexicon_index,
+            self.lexicon_surface_index,
+            self.target_index,
+        )
         train_rows, test_rows = split_dataset(prepared)
 
-        train_texts = [str(row["comment"]) for row in train_rows]
+        train_texts = [str(row["cleaned_text"]) for row in train_rows]
         train_labels = [int(row["label"]) for row in train_rows]
-        test_texts = [str(row["comment"]) for row in test_rows]
+        test_texts = [str(row["cleaned_text"]) for row in test_rows]
         test_labels = [int(row["label"]) for row in test_rows]
 
         self.vectorizer.fit(train_texts)
@@ -667,27 +854,21 @@ class CyberbullyingPipeline:
         positive_rows = sum(int(row["label"]) for row in prepared)
         negative_rows = len(prepared) - positive_rows
 
-        self.records = prepared[:500]
         self.status = {
-            "dataset_rows": len(prepared),
-            "cyberbullying_count": positive_rows,
-            "non_cyberbullying_count": negative_rows,
-            "dataset_loaded": True,
-            "dataset_path": str(self.dataset_path),
-            "model_cache_path": str(self.model_cache_path),
-            "model_cached": False,
+            "model_name": "TF-IDF + Logistic Regression",
+            "rule": "Cyberbullying = HurtLex match AND target indicator or @username.",
             "text_column": text_column,
-            "label_column": label_column,
             "training_rows": len(train_rows),
             "test_rows": len(test_rows),
+            "pseudo_labeled_cyberbullying": positive_rows,
+            "pseudo_labeled_safe": negative_rows,
             "vocabulary_size": len(self.vectorizer.vocabulary),
             "training_accuracy": train_metrics["accuracy"],
             "test_accuracy": test_metrics["accuracy"],
             "precision": test_metrics["precision"],
             "recall": test_metrics["recall"],
             "f1_score": test_metrics["f1"],
-            "model_name": "TF-IDF + Logistic Regression",
-            "rule": "Tweets are vectorized with TF-IDF features and classified with a logistic regression model.",
+            "model_cached": False,
         }
         self._save_cache()
         self.trained = True
@@ -695,55 +876,79 @@ class CyberbullyingPipeline:
     def load(self) -> None:
         if self.trained:
             return
-
+        self._load_rule_resources()
         if self._load_cache():
             return
-
         self._train_model()
 
     def analyze_text(self, text: str) -> Dict[str, object]:
         self.load()
-        self._load_explainability_resources()
-        normalized = normalize_lookup_text(text)
-        vector = self.vectorizer.transform_one(text)
-        probability = self.classifier.predict_probability(vector) if vector else 0.0
-        is_cyberbullying = probability >= 0.5
-        confidence = probability if is_cyberbullying else (1.0 - probability)
-        risk_score = round(probability * 100, 2)
-        confidence_score = round(confidence, 2)
+        preprocessed = preprocess_text(text)
 
-        if risk_score >= 70:
-            risk_level = "High"
-        elif risk_score >= 35:
+        hurtlex_surface_matches_normalized = find_phrase_matches_from_tokens(
+            list(preprocessed["surface_tokens"]),
+            self.lexicon_surface_index,
+        )
+        hurtlex_lemma_matches_normalized = find_phrase_matches_from_tokens(
+            list(preprocessed["hurtlex_tokens"]),
+            self.lexicon_index,
+        )
+        hurtlex_matches_normalized = hurtlex_surface_matches_normalized or hurtlex_lemma_matches_normalized
+        target_indicator_matches_normalized = find_phrase_matches_from_tokens(
+            list(preprocessed["target_tokens"]),
+            self.target_index,
+        )
+        target_matches_normalized = unique_in_order(
+            target_indicator_matches_normalized + list(preprocessed["username_mentions"])
+        )
+        rule_triggered = bool(hurtlex_matches_normalized and target_matches_normalized)
+
+        hurtlex_matches = recover_surface_phrase_matches(
+            text,
+            hurtlex_surface_matches_normalized,
+            lemmatize=False,
+        ) or recover_surface_phrase_matches(
+            text,
+            hurtlex_lemma_matches_normalized,
+            lemmatize=True,
+        )
+        target_matches = recover_surface_phrase_matches(
+            text,
+            target_indicator_matches_normalized,
+            lemmatize=False,
+        )
+        target_matches = unique_in_order(target_matches + list(preprocessed["username_mentions"]))
+
+        cleaned_text = str(preprocessed["cleaned_text"])
+        vector = self.vectorizer.transform_one(cleaned_text)
+        probability = self.classifier.predict_probability(vector) if vector else 0.0
+        risk_score = round(probability * 100, 2)
+        confidence_score = round(probability, 2)
+
+        if probability < 0.3:
+            risk_level = "Low"
+        elif probability < 0.7:
             risk_level = "Medium"
         else:
-            risk_level = "Low"
+            risk_level = "High"
 
-        top_tokens = []
-        token_counts = Counter(tokenize_text(text))
-        for token, _ in token_counts.most_common(8):
-            if token in self.vectorizer.vocabulary:
-                top_tokens.append(token)
-
-        hurtlex_matches = find_phrase_matches(text, self.lexicon_index)
-        target_matches = find_phrase_matches(text, self.target_index)
-        rule_triggered = bool(hurtlex_matches and target_matches)
-        safer_text = soften_text(text, hurtlex_matches) if is_cyberbullying else text.strip()
+        is_cyberbullying = rule_triggered
+        safer_text = soften_text(text, hurtlex_matches) if is_cyberbullying else ""
 
         return {
             "comment": text,
-            "normalized_text": normalized,
-            "active_tokens": top_tokens,
+            "cleaned_text": cleaned_text,
             "label": 1 if is_cyberbullying else 0,
             "probability": probability,
             "risk_score": risk_score,
             "risk_level": risk_level,
-            "confidence": round(confidence * 100, 2),
             "confidence_score": confidence_score,
             "hurtlex_matches": hurtlex_matches,
             "target_matches": target_matches,
+            "hurtlex_display": format_match_text(hurtlex_matches, "No offensive word detected"),
+            "target_display": format_match_text(target_matches, "No target indicator detected"),
             "rule_triggered": rule_triggered,
-            "warning_message": "This message may be harmful. Please revise before posting." if is_cyberbullying else "",
+            "warning_message": "⚠️ This message may be harmful. Please revise before posting." if is_cyberbullying else "",
             "safer_text": safer_text,
             "result_text": "Cyberbullying Detected" if is_cyberbullying else "Safe Content",
         }
@@ -756,18 +961,16 @@ class CyberbullyingPipeline:
         return "\n".join(
             [
                 f"Model: {self.status['model_name']}",
-                f"Rows: {self.status['dataset_rows']}",
-                f"Cyberbullying: {self.status['cyberbullying_count']}",
-                f"Non-Cyberbullying: {self.status['non_cyberbullying_count']}",
+                f"Rule: {self.status['rule']}",
                 f"Training rows: {self.status['training_rows']}",
                 f"Test rows: {self.status['test_rows']}",
+                f"Pseudo-labeled cyberbullying: {self.status['pseudo_labeled_cyberbullying']}",
+                f"Pseudo-labeled safe: {self.status['pseudo_labeled_safe']}",
                 f"Vocabulary size: {self.status['vocabulary_size']}",
                 f"Training accuracy: {self.status['training_accuracy'] * 100:.2f}%",
                 f"Test accuracy: {self.status['test_accuracy'] * 100:.2f}%",
                 f"Precision: {self.status['precision'] * 100:.2f}%",
                 f"Recall: {self.status['recall'] * 100:.2f}%",
                 f"F1 score: {self.status['f1_score'] * 100:.2f}%",
-                f"Dataset loaded: {'yes' if self.status['dataset_loaded'] else 'no'}",
-                f"Rule: {self.status['rule']}",
             ]
         )

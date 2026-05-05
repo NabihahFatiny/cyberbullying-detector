@@ -2,10 +2,11 @@ import argparse
 import html
 import os
 import re
+import sys
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import List, Sequence, Tuple
 from urllib.parse import parse_qs
 
 from cyberbullying_app.pipeline import CyberbullyingPipeline, PipelineConfigError
@@ -34,10 +35,7 @@ def env_int(name: str, default: int) -> int:
 
 
 def build_setup_message(message: str) -> str:
-    return (
-        f"{message} Expected dataset file at {DEFAULT_DATASET}. "
-        f"You can override it with DATASET_PATH."
-    )
+    return "The detection service is temporarily unavailable. Please contact the developer."
 
 
 def load_styles() -> str:
@@ -90,107 +88,58 @@ def render_highlighted_text(text: str, hurtlex_matches: Sequence[str], target_ma
     return "".join(parts)
 
 
-def render_match_list(items: Sequence[str]) -> str:
-    if not items:
-        return "None"
-    return ", ".join(html.escape(item) for item in items)
-
-
-def render_history(history: Sequence[Dict[str, object]]) -> str:
-    if not history:
-        return """
-    <section class="panel-card">
-        <div class="panel-title">Recent Predictions</div>
-        <div class="empty-text">No predictions yet.</div>
-    </section>
-    """
-
-    items = []
-    for item in history:
-        items.append(
-            f"""
-            <li class="history-item">
-                <div class="history-result">{html.escape(str(item['result']))}</div>
-                <div class="history-text">{html.escape(str(item['comment']))}</div>
-                <div class="history-meta">Risk: {item['risk_score']:.2f}%</div>
-            </li>
-            """
-        )
-    return f"""
-    <section class="panel-card">
-        <div class="panel-title">Recent Predictions</div>
-        <ul class="history-list">
-            {''.join(items)}
-        </ul>
-    </section>
-    """
-
-
-def render_analytics(analytics: Dict[str, int]) -> str:
-    total_tested = int(analytics.get("total_tested", 0))
-    total_detected = int(analytics.get("total_detected", 0))
-    safe_count = total_tested - total_detected
-    return f"""
-    <section class="panel-card analytics-card">
-        <div class="panel-title">Simple Analytics</div>
-        <div class="analytics-grid">
-            <div class="analytics-item">
-                <span class="analytics-label">Total Tested</span>
-                <strong>{total_tested}</strong>
-            </div>
-            <div class="analytics-item">
-                <span class="analytics-label">Total Detected</span>
-                <strong>{total_detected}</strong>
-            </div>
-            <div class="analytics-item">
-                <span class="analytics-label">Safe Content</span>
-                <strong>{safe_count}</strong>
-            </div>
-        </div>
-    </section>
-    """
-
-
 def render_page(
     prediction=None,
     comment_text: str = "",
     setup_message: str = "",
-    history: Sequence[Dict[str, object]] = (),
-    analytics: Dict[str, int] = None,
 ) -> str:
     styles = load_styles()
-    analytics = analytics or {"total_tested": 0, "total_detected": 0}
+    service_available = not setup_message
 
     setup_block = ""
     if setup_message:
         setup_block = f"""
         <section class="alert-card">
-            <div class="panel-title">Setup Required</div>
+            <div class="panel-title">System Notice</div>
             <div class="alert-text">{html.escape(setup_message)}</div>
         </section>
         """
 
     if prediction:
         result_class = "danger" if prediction["label"] == 1 else "safe"
+        show_harmful_content = prediction["label"] == 1
         highlighted_text = render_highlighted_text(
             str(prediction["comment"]),
             prediction["hurtlex_matches"],
             prediction["target_matches"],
-        )
-        warning_block = (
-            f"""
-            <section class="warning-card">
-                <div class="panel-title">Warning Message</div>
-                <div class="warning-text">{html.escape(prediction['warning_message'])}</div>
-            </section>
-            """
-            if prediction["warning_message"]
-            else ""
-        )
+        ) if show_harmful_content else ""
+        warning_block = f"""
+        <section class="warning-card">
+            <div class="panel-title">Warning Message</div>
+            <div class="warning-text">{html.escape(prediction['warning_message'])}</div>
+        </section>
+        """ if show_harmful_content else ""
+        suggestion_block = f"""
+        <section class="panel-card">
+            <div class="panel-title">Suggested Safer Text</div>
+            <div class="safer-text">{html.escape(prediction['safer_text'])}</div>
+        </section>
+        """ if show_harmful_content and prediction["safer_text"] else ""
+        highlight_block = f"""
+        <section class="panel-card">
+            <div class="panel-title">Highlighted Text</div>
+            <div class="highlighted-text">{highlighted_text}</div>
+            <div class="highlight-legend">
+                <span class="legend-pill offensive">Offensive word</span>
+                <span class="legend-pill target">Target word</span>
+            </div>
+        </section>
+        """ if show_harmful_content else ""
     else:
         result_class = "idle"
-        highlighted_text = "<span class=\"empty-text\">Submit a message to see highlighted words.</span>"
         warning_block = ""
+        suggestion_block = ""
+        highlight_block = ""
         prediction = {
             "label": 0,
             "result_text": "Waiting for Analysis",
@@ -199,12 +148,11 @@ def render_page(
             "confidence_score": 0.0,
             "hurtlex_matches": [],
             "target_matches": [],
+            "hurtlex_display": "No offensive word detected",
+            "target_display": "No target indicator detected",
             "rule_triggered": False,
             "safer_text": "",
         }
-
-    history_block = render_history(history)
-    analytics_block = render_analytics(analytics)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -228,12 +176,13 @@ def render_page(
             <form method="post" action="/predict" class="predict-form">
                 <div class="section-heading">
                     <h2>Input Section</h2>
-                    <p>Check your message before posting it.</p>
+                    <p>Enter an English tweet or comment to check before posting.</p>
                 </div>
                 <label for="comment" class="input-label">Text input box</label>
+                <p class="input-note">English text only.</p>
                 <textarea id="comment" name="comment" rows="6" placeholder="Type your message before posting...">{html.escape(comment_text)}</textarea>
                 <div class="button-row">
-                    <button type="submit" class="btn-primary">Detect</button>
+                    <button type="submit" class="btn-primary" {"disabled" if not service_available else ""}>Detect</button>
                     <button type="button" class="btn-secondary" onclick="window.location='/'">Clear</button>
                 </div>
             </form>
@@ -241,7 +190,7 @@ def render_page(
             <section class="result-card {result_class}">
                 <div class="section-heading">
                     <h2>Detection Result</h2>
-                    <p>Instant classification and explainable cues.</p>
+                    <p>Rule-based detection with logistic regression risk scoring.</p>
                 </div>
                 <div class="result-banner">{html.escape(prediction['result_text'])}</div>
                 <div class="metrics-grid">
@@ -262,31 +211,16 @@ def render_page(
                 <div class="detail-grid">
                     <section class="panel-card">
                         <div class="panel-title">Explanation</div>
-                        <div class="detail-row"><strong>HurtLex word detected:</strong> {render_match_list(prediction['hurtlex_matches'])}</div>
-                        <div class="detail-row"><strong>Target indicator detected:</strong> {render_match_list(prediction['target_matches'])}</div>
+                        <div class="detail-row"><strong>HurtLex word detected:</strong> {html.escape(prediction['hurtlex_display'])}</div>
+                        <div class="detail-row"><strong>Target indicator detected:</strong> {html.escape(prediction['target_display'])}</div>
                         <div class="detail-row"><strong>Rule triggered:</strong> {"Yes" if prediction['rule_triggered'] else "No"}</div>
-                    </section>
-
-                    <section class="panel-card">
-                        <div class="panel-title">Suggested Safer Text</div>
-                        <div class="safer-text">{html.escape(prediction['safer_text'] or 'No suggestion yet.')}</div>
                     </section>
                 </div>
 
                 {warning_block}
-
-                <section class="panel-card">
-                    <div class="panel-title">Highlighted Text</div>
-                    <div class="highlighted-text">{highlighted_text}</div>
-                    <div class="highlight-legend">
-                        <span class="legend-pill offensive">Offensive word</span>
-                        <span class="legend-pill target">Target word</span>
-                    </div>
-                </section>
+                {suggestion_block}
+                {highlight_block}
             </section>
-
-            {analytics_block}
-            {history_block}
         </section>
     </main>
 </body>
@@ -297,8 +231,6 @@ def render_page(
 class AppHandler(BaseHTTPRequestHandler):
     pipeline: CyberbullyingPipeline = None
     setup_message: str = ""
-    history: List[Dict[str, object]] = []
-    analytics: Dict[str, int] = {"total_tested": 0, "total_detected": 0}
 
     def _send_html(self, content: str, status: HTTPStatus = HTTPStatus.OK) -> None:
         payload = content.encode("utf-8")
@@ -315,8 +247,6 @@ class AppHandler(BaseHTTPRequestHandler):
         self._send_html(
             render_page(
                 setup_message=self.setup_message,
-                history=self.history,
-                analytics=self.analytics,
             )
         )
 
@@ -331,26 +261,11 @@ class AppHandler(BaseHTTPRequestHandler):
         comment = form.get("comment", [""])[0].strip()
         prediction = self.pipeline.predict(comment) if self.pipeline and comment else None
 
-        if prediction and comment:
-            self.analytics["total_tested"] += 1
-            self.analytics["total_detected"] += int(prediction["label"])
-            self.history.insert(
-                0,
-                {
-                    "comment": comment,
-                    "result": prediction["result_text"],
-                    "risk_score": prediction["risk_score"],
-                },
-            )
-            self.history = self.history[:5]
-
         self._send_html(
             render_page(
                 prediction=prediction,
                 comment_text=comment,
                 setup_message=self.setup_message,
-                history=self.history,
-                analytics=self.analytics,
             )
         )
 
@@ -379,6 +294,7 @@ def main() -> None:
     try:
         pipeline = create_pipeline(Path(args.dataset), Path(args.hurtlex), Path(args.targets))
     except PipelineConfigError as exc:
+        print(f"[pipeline error] {exc}", file=sys.stderr)
         setup_message = build_setup_message(str(exc))
 
     if args.train_only:

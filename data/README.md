@@ -1,15 +1,9 @@
 # Data Folder
 
-This app is deployment-friendly when its supporting files live in this `data/` folder.
+The thesis pipeline reads these files directly from this folder by default:
 
-## Default files
+- `dataset.csv` for model training data
+- `hurtlex_EN.tsv` for offensive-word lookup
+- `target_indicators.txt` for target-indicator lookup
 
-- `dataset.csv`: required for TF-IDF + Logistic Regression training
-- `hurtlex_EN.tsv`: optional legacy file
-- `target_indicators.txt`: optional legacy file
-
-## Notes
-
-- The app trains a local model and caches it as `tfidf_logreg_model.json` after the first run.
-- You can point the app to a different dataset outside the repo by setting `DATASET_PATH`.
-- The HurtLex and target files are kept only as legacy project resources.
+The trained TF-IDF + Logistic Regression cache is stored as `tfidf_logreg_model.json` after training.
