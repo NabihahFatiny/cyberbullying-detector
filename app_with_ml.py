@@ -1,5 +1,7 @@
 import os, re, string
 from flask import Flask, render_template, request, jsonify
+import numpy as np
+import joblib
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
@@ -34,7 +36,7 @@ def _ensure_nltk():
 
 _ensure_nltk()
 
-# ── HurtLex quality filters ──────────────────────────────────────────────────────────
+# ── HurtLex quality filters ──────────────────────────────────────────────────
 # Words that appear in HurtLex but are NOT offensive in everyday English
 _HURTLEX_EXCLUSIONS = {
     'love', 'poor', 'kill', 'poor', 'pretentious', 'barbarian', 'die',
@@ -62,11 +64,13 @@ _EXTRA_OFFENSIVE = {
     'trash', 'garbage', 'pig', 'rat', 'snake',
 }
 
-# ── Globals ──────────────────────────────────────────────────────────────────────────
+# ── Globals ──────────────────────────────────────────────────────────────────
 hurtlex_tokens  = set()   # single-word lemmas
 hurtlex_phrases = []      # multi-word lemmas (sorted longest-first)
 target_set      = set()   # single-word target indicators
 target_phrases  = []      # multi-word target indicators
+ml_model        = None
+ml_vectorizer   = None
 try:
     _lemmatizer = WordNetLemmatizer()
 except Exception:
@@ -76,7 +80,7 @@ try:
 except Exception:
     _stop_words = set()
 
-# ── Resource loading ─────────────────────────────────────────────────────────────────
+# ── Resource loading ─────────────────────────────────────────────────────────
 def _find(filename, subdirs=('data',)):
     """Return the first existing path for filename, checking subdirs then root."""
     for sub in subdirs:
@@ -146,8 +150,24 @@ def _load_targets():
         print(f"WARNING: target load error: {e}")
 
 
+def _load_model():
+    global ml_model, ml_vectorizer
+    mp = _find('logistic_model.pkl',  ('model',))
+    vp = _find('tfidf_vectorizer.pkl', ('model',))
+    if mp and vp:
+        try:
+            ml_model      = joblib.load(mp)
+            ml_vectorizer = joblib.load(vp)
+            print("ML model loaded successfully.")
+        except Exception as e:
+            print(f"WARNING: model load error: {e}")
+    else:
+        print("INFO: No saved model found – running in rule-only mode.")
+
+
 _load_hurtlex()
 _load_targets()
+_load_model()
 
 # ── Text preprocessing ───────────────────────────────────────────────────────
 _URL_RE   = re.compile(r'https?://\S+|www\.\S+')
@@ -236,12 +256,26 @@ def _find_offensive(tokens, clean_text: str):
     return sorted(found)
 
 
+def _model_score(clean_text: str):
+    """Return ML probability of cyberbullying (0–1) or None if no model."""
+    if ml_model is None or ml_vectorizer is None:
+        return None
+    try:
+        X = ml_vectorizer.transform([clean_text])
+        proba = ml_model.predict_proba(X)[0]
+        classes = list(ml_model.classes_)
+        idx = classes.index(1) if 1 in classes else 1
+        return float(proba[idx])
+    except Exception:
+        return None
+
+
 def _compute_risk(offensive, targets, clean_text):
-    """Compute final risk score using rules only (no ML)."""
+    """Compute final risk score combining rules + ML."""
     has_off = len(offensive) > 0
     has_tgt = len(targets)  > 0
 
-    # Rule-based scoring
+    # Rule-based base score
     if has_off and has_tgt:
         rule_score = min(0.70 + 0.04 * len(offensive) + 0.03 * len(targets), 1.0)
     elif has_off:
@@ -251,6 +285,9 @@ def _compute_risk(offensive, targets, clean_text):
     else:
         rule_score = 0.05
 
+    ml = _model_score(clean_text)
+    if ml is not None:
+        return (rule_score * 0.5 + ml * 0.5)
     return rule_score
 
 
@@ -260,6 +297,15 @@ def _risk_level(score):
     if score >= 0.30:
         return 'Medium'
     return 'Low'
+
+
+def _safer_text(original, offensive, targets):
+    s = original
+    s = _MENTION_RE.sub('<span class="replaced">[person]</span>', s)
+    for phrase in sorted(offensive, key=len, reverse=True):
+        s = re.sub(r'\b' + re.escape(phrase) + r'\b',
+                   '<span class="replaced">[removed]</span>', s, flags=re.IGNORECASE)
+    return s
 
 
 def _highlight_original(original, offensive, targets):
@@ -320,11 +366,12 @@ def analyze(text: str) -> dict:
     rule_triggered   = bool(offensive) and bool(targets)
     is_cyberbullying = rule_triggered
 
-    # Step 5 – scores (rules only)
+    # Step 5 – scores
     risk_score  = _compute_risk(offensive, targets, clean)
     risk_pct    = int(round(risk_score * 100))
     risk_level  = _risk_level(risk_score)
-    confidence  = round(risk_score, 4)
+    ml          = _model_score(clean)
+    confidence  = round(ml if ml is not None else risk_score, 4)
 
     # Step 6 – presentation
     if is_cyberbullying:
@@ -333,7 +380,7 @@ def analyze(text: str) -> dict:
         explanation = (f'Offensive word(s) detected: {", ".join(offensive) or "—"}. '
                        f'Target indicator(s) found: {", ".join(targets) or "—"}.')
         highlighted  = _highlight_original(text, offensive, targets)
-        safer_text   = ''
+        safer_text   = _safer_text(text, offensive, targets)
     else:
         detection_result = 'Safe Content'
         warning     = ''
