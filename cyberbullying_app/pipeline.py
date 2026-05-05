@@ -774,9 +774,7 @@ class CyberbullyingPipeline:
     def _dataset_signature(self) -> Dict[str, object]:
         stat = self.dataset_path.stat()
         return {
-            "path": str(self.dataset_path.resolve()),
             "size": stat.st_size,
-            "mtime": stat.st_mtime,
         }
 
     def _load_rule_resources(self) -> None:

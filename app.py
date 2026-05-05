@@ -30,6 +30,11 @@ def _ensure_pipeline():
             print(f"WARNING: Pipeline load error: {e}")
         _pipeline_ready = True
 
+
+# Start loading in background so port binds immediately and pipeline
+# is ready before the first user request arrives.
+threading.Thread(target=_ensure_pipeline, daemon=True).start()
+
 # ── Highlighting helper ───────────────────────────────────────────────────────
 _MENTION_RE = re.compile(r'@\w+')
 
