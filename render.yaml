@@ -1,10 +1,13 @@
+version: "1"
 services:
   - type: web
-    name: cyberbullying-detector-simple
-    env: python
+    name: cyberbullying-detector-force
+    runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && echo "Build complete"
     startCommand: python app.py
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: "3.11"
+      - key: PORT
+        value: "5000"
