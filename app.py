@@ -101,13 +101,12 @@ def _load_hurtlex():
         # Skip header line
         for line in lines[1:]:
             parts = line.strip().split('\t')
-            if len(parts) < 2:
+            if len(parts) < 4:
                 continue
-            lemma = parts[0].lower().strip()
+            lemma = parts[3].lower().strip()
             if not lemma or lemma in _HURTLEX_EXCLUSIONS:
                 continue
-            # Skip non-offensive categories if category column exists
-            if len(parts) > 1 and parts[1] in _SKIP_CATEGORIES:
+            if parts[1] in _SKIP_CATEGORIES:
                 continue
             if ' ' in lemma:
                 hurtlex_phrases.append(lemma)
@@ -318,7 +317,7 @@ def analyze(text: str) -> dict:
 
     # Step 4 – rule
     rule_triggered   = bool(offensive) and bool(targets)
-    is_cyberbullying = rule_triggered
+    is_cyberbullying = bool(offensive)  # offensive alone is sufficient
 
     # Step 5 – scores (rules only)
     risk_score  = _compute_risk(offensive, targets, clean)
@@ -330,8 +329,11 @@ def analyze(text: str) -> dict:
     if is_cyberbullying:
         detection_result = 'Cyberbullying Detected'
         warning  = 'This message may be harmful. Please revise before posting.'
-        explanation = (f'Offensive word(s) detected: {", ".join(offensive) or "—"}. '
-                       f'Target indicator(s) found: {", ".join(targets) or "—"}.')
+        if offensive and targets:
+            explanation = (f'Offensive word(s) detected: {", ".join(offensive)}. '
+                           f'Target indicator(s) found: {", ".join(targets)}.')
+        else:
+            explanation = f'Offensive word(s) detected: {", ".join(offensive)}.'
         highlighted  = _highlight_original(text, offensive, targets)
         safer_text   = ''
     else:
@@ -339,10 +341,7 @@ def analyze(text: str) -> dict:
         warning     = ''
         highlighted = text
         safer_text  = ''
-        if offensive and not targets:
-            explanation = ('Potentially strong language detected, but no specific person '
-                           'was targeted — may be self-referential or general expression.')
-        elif targets and not offensive:
+        if targets and not offensive:
             explanation = 'A person was addressed, but no offensive language was found.'
         else:
             explanation = 'No offensive language or direct targeting detected.'
