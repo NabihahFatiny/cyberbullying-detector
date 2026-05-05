@@ -1,6 +1,5 @@
 import os, re, string
 from flask import Flask, render_template, request, jsonify
-import pandas as pd
 import numpy as np
 import joblib
 import nltk
@@ -101,19 +100,23 @@ def _load_hurtlex():
         hurtlex_tokens.update(_EXTRA_OFFENSIVE)
         return
     try:
-        df = pd.read_csv(path, sep='\t', on_bad_lines='skip', encoding='utf-8')
-        if 'lemma' not in df.columns:
-            return
-        # Skip non-offensive categories and apply exclusion list
-        if 'category' in df.columns:
-            df = df[~df['category'].isin(_SKIP_CATEGORIES)]
-        for raw in df['lemma'].dropna().str.lower().str.strip():
-            if raw in _HURTLEX_EXCLUSIONS:
+        with open(path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        # Skip header line
+        for line in lines[1:]:
+            parts = line.strip().split('\t')
+            if len(parts) < 2:
                 continue
-            if ' ' in raw:
-                hurtlex_phrases.append(raw)
+            lemma = parts[0].lower().strip()
+            if not lemma or lemma in _HURTLEX_EXCLUSIONS:
+                continue
+            # Skip non-offensive categories if category column exists
+            if len(parts) > 1 and parts[1] in _SKIP_CATEGORIES:
+                continue
+            if ' ' in lemma:
+                hurtlex_phrases.append(lemma)
             else:
-                hurtlex_tokens.add(raw)
+                hurtlex_tokens.add(lemma)
         # Merge supplementary offensive words
         hurtlex_tokens.update(_EXTRA_OFFENSIVE)
         hurtlex_phrases.sort(key=len, reverse=True)
