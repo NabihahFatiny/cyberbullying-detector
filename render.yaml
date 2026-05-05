@@ -1,13 +1,11 @@
 version: "1"
 services:
   - type: web
-    name: cyberbullying-detector-force
-    runtime: python
+    name: cyberbullying-detector-docker
+    env: docker
     plan: free
-    buildCommand: pip install -r requirements.txt && echo "Build complete"
-    startCommand: python app.py
+    buildCommand: "docker build -t cyberbullying-detector ."
+    startCommand: "docker run -p $PORT:5000 cyberbullying-detector"
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
-      - key: PORT
-        value: "5000"
