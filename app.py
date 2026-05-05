@@ -11,7 +11,7 @@ from cyberbullying_app.pipeline import CyberbullyingPipeline, PipelineConfigErro
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
-DEFAULT_DATASET = DATA_DIR / "dataset.xlsx"
+DEFAULT_DATASET = DATA_DIR / "dataset.csv"
 DEFAULT_HURTLEX = DATA_DIR / "hurtlex_EN.tsv"
 DEFAULT_TARGETS = DATA_DIR / "target_indicators.txt"
 
@@ -34,9 +34,9 @@ def env_int(name: str, default: int) -> int:
 def build_setup_message(message: str) -> str:
     return (
         f"{message} "
-        f"Expected files: dataset at {DEFAULT_DATASET} (optional), "
-        f"HurtLex at {DEFAULT_HURTLEX}, and target indicators at {DEFAULT_TARGETS}. "
-        f"You can override these with DATASET_PATH, HURTLEX_PATH, and TARGETS_PATH."
+        f"Expected dataset file at {DEFAULT_DATASET}. "
+        f"You can override it with DATASET_PATH. "
+        f"Legacy lexicon files remain available at {DEFAULT_HURTLEX} and {DEFAULT_TARGETS}."
     )
 
 
@@ -50,28 +50,26 @@ def render_page(prediction=None, comment_text="", setup_message="", pipeline_sta
         state_class = "danger" if prediction["label"] == 1 else "safe"
         result_title = prediction["result_text"]
         confidence_text = f"Confidence: {prediction['confidence']}%"
-        hurtlex_text = ", ".join(prediction["lexicon_matches"]) if prediction["lexicon_matches"] else "-"
-        target_text = ", ".join(prediction["target_matches"]) if prediction["target_matches"] else "-"
+        probability_text = f"{prediction['probability'] * 100:.2f}%"
+        token_text = ", ".join(prediction["active_tokens"]) if prediction["active_tokens"] else "-"
     else:
         state_class = "idle"
         result_title = "No result yet"
         confidence_text = "Confidence: -"
-        hurtlex_text = "-"
-        target_text = "-"
+        probability_text = "-"
+        token_text = "-"
 
     status_block = ""
     if pipeline_status:
-        dataset_label = (
-            f"Loaded from {pipeline_status['dataset_path']}"
-            if pipeline_status.get("dataset_loaded")
-            else "Not loaded. Predictions still work without it."
-        )
         status_block = f"""
         <section class="status-card">
-            <div class="status-title">Deployment Status</div>
-            <div class="status-text"><strong>Dataset:</strong> {html.escape(dataset_label)}</div>
-            <div class="status-text"><strong>HurtLex:</strong> {html.escape(pipeline_status['hurtlex_path'])}</div>
-            <div class="status-text"><strong>Targets:</strong> {html.escape(pipeline_status['target_path'])}</div>
+            <div class="status-title">Model Status</div>
+            <div class="status-text"><strong>Model:</strong> {html.escape(pipeline_status['model_name'])}</div>
+            <div class="status-text"><strong>Dataset:</strong> {html.escape(pipeline_status['dataset_path'])}</div>
+            <div class="status-text"><strong>Rows:</strong> {pipeline_status['dataset_rows']} total, {pipeline_status['training_rows']} train, {pipeline_status['test_rows']} test</div>
+            <div class="status-text"><strong>Vocabulary:</strong> {pipeline_status['vocabulary_size']} terms</div>
+            <div class="status-text"><strong>Test Accuracy:</strong> {pipeline_status['test_accuracy'] * 100:.2f}%</div>
+            <div class="status-text"><strong>Precision / Recall / F1:</strong> {pipeline_status['precision'] * 100:.2f}% / {pipeline_status['recall'] * 100:.2f}% / {pipeline_status['f1_score'] * 100:.2f}%</div>
         </section>
         """
 
@@ -90,9 +88,9 @@ def render_page(prediction=None, comment_text="", setup_message="", pipeline_sta
         <div class="result-main">{html.escape(result_title)}</div>
         <div class="result-sub">{html.escape(confidence_text)}</div>
         <div class="result-details">
-            <div><strong>HurtLex word:</strong> {html.escape(hurtlex_text)}</div>
-            <div><strong>Target indicator:</strong> {html.escape(target_text)}</div>
-            <div><strong>Rule:</strong> Cyberbullying only if both are detected.</div>
+            <div><strong>Model:</strong> TF-IDF + Logistic Regression</div>
+            <div><strong>Cyberbullying Probability:</strong> {html.escape(probability_text)}</div>
+            <div><strong>Active Tokens:</strong> {html.escape(token_text)}</div>
         </div>
     </section>
     """
@@ -111,15 +109,15 @@ def render_page(prediction=None, comment_text="", setup_message="", pipeline_sta
             <h1>Intelligent Real-Time Cyberbullying Detection System</h1>
             <section class="info-card">
                 <div class="info-title">How This Detection Works</div>
-                <div class="info-text">The system labels a tweet as cyberbullying only when both conditions are present in the same text:</div>
+                <div class="info-text">The system converts tweet text into TF-IDF features and uses a logistic regression classifier trained on labeled cyberbullying data.</div>
                 <ol class="rule-list">
-                    <li>A HurtLex offensive word is detected.</li>
-                    <li>A target indicator is detected, such as <code>you</code>, <code>your</code>, <code>u</code>, or a mention like <code>@username</code>.</li>
+                    <li>Each tweet is normalized and transformed into weighted TF-IDF terms.</li>
+                    <li>The logistic regression model predicts whether the tweet is cyberbullying or not cyberbullying.</li>
                 </ol>
                 <div class="example-row">
-                    <span class="example-chip">Cyberbullying: "you are stupid"</span>
-                    <span class="example-chip">Not Cyberbullying: "stupid"</span>
-                    <span class="example-chip">Not Cyberbullying: "you are kind"</span>
+                    <span class="example-chip">Model: TF-IDF + Logistic Regression</span>
+                    <span class="example-chip">Input: tweet text</span>
+                    <span class="example-chip">Output: cyberbullying probability</span>
                 </div>
             </section>
             {setup_block}

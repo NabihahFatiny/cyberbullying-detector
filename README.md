@@ -1,23 +1,23 @@
 # Intelligent Real-Time Cyberbullying Detection System
 
-This project is a deployable local web app for rule-based cyberbullying detection. It does not use a database.
+This project is a deployable local web app that uses TF-IDF feature extraction with Logistic Regression for cyberbullying detection. It does not use a database.
 
 ## How it works
 
-The detector marks a comment as cyberbullying only when both are present:
+The detector trains on labeled tweet data and then predicts new text with a machine learning pipeline:
 
-1. An offensive word from the HurtLex-style lexicon.
-2. A target indicator such as `you`, `your`, `u`, or `@username`.
+1. Tweet text is normalized and converted into TF-IDF features.
+2. A Logistic Regression classifier predicts whether the tweet is cyberbullying.
 
 ## Data files
 
 By default the app reads files from [data/README.md](C:/xampp/htdocs/cyberbullying/data/README.md):
 
-- `data/hurtlex_EN.tsv` required
-- `data/target_indicators.txt` required
-- `data/dataset.xlsx` optional
+- `data/dataset.csv` required for TF-IDF training and prediction
+- `data/hurtlex_EN.tsv` optional legacy file
+- `data/target_indicators.txt` optional legacy file
 
-The repository already includes starter lexicon and target files so deployment can work immediately. If you want your full research version, replace the starter lexicon with your full HurtLex file and add your dataset as `data/dataset.xlsx`.
+The repository now includes a local training dataset at `data/dataset.csv` so the model can train and cache itself automatically. The HurtLex and target files are still kept in the project as legacy resources, but they are no longer used for prediction.
 
 ## Run locally
 
@@ -31,8 +31,6 @@ Then open `http://127.0.0.1:8080`.
 
 You can override the default file locations with environment variables:
 
-- `HURTLEX_PATH`
-- `TARGETS_PATH`
 - `DATASET_PATH`
 - `HOST`
 - `PORT`
@@ -41,8 +39,7 @@ Example:
 
 ```powershell
 $env:PORT="8080"
-$env:HURTLEX_PATH="C:\path\to\hurtlex_EN.tsv"
-$env:TARGETS_PATH="C:\path\to\target_indicators.txt"
+$env:DATASET_PATH="C:\path\to\dataset.csv"
 python .\app.py
 ```
 
@@ -52,4 +49,4 @@ python .\app.py
 powershell -ExecutionPolicy Bypass -File .\run_dashboard.ps1 --train-only
 ```
 
-If `data/dataset.xlsx` is missing, the app still runs and predictions still work. Only the dataset summary is skipped.
+The first run trains the TF-IDF + Logistic Regression model and saves a cache file in `data/tfidf_logreg_model.json`. Later runs reuse that cache until the dataset changes.

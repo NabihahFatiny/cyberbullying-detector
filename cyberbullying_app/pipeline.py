@@ -1,14 +1,19 @@
+import csv
+import json
+import math
+import random
 import re
 import shutil
 import subprocess
 import tempfile
-from collections import defaultdict
+from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Sequence, Set
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from xml.etree import ElementTree
 
 
 XLSX_NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+MODEL_VERSION = 1
 
 
 class PipelineConfigError(RuntimeError):
@@ -28,62 +33,29 @@ def normalize_lookup_text(text: str) -> str:
     return text
 
 
-def build_phrase_index(phrases: Sequence[str]) -> Dict[int, Set[str]]:
-    index: Dict[int, Set[str]] = defaultdict(set)
-    for phrase in phrases:
-        normalized = normalize_lookup_text(phrase)
-        if not normalized or normalized == "nan":
-            continue
-        index[len(normalized.split())].add(normalized)
-    return dict(index)
-
-def find_phrase_matches(text: str, phrase_index: Dict[int, Set[str]]) -> List[str]:
+def tokenize_text(text: str) -> List[str]:
     normalized = normalize_lookup_text(text)
-    tokens = normalized.split()
-    matches = set()
-
-    if not tokens:
+    if not normalized:
         return []
-
-    for phrase_length, phrases in phrase_index.items():
-        if phrase_length <= 0 or len(tokens) < phrase_length:
-            continue
-        for start in range(len(tokens) - phrase_length + 1):
-            candidate = " ".join(tokens[start : start + phrase_length])
-            if candidate in phrases:
-                matches.add(candidate)
-
-    return sorted(matches, key=lambda item: (len(item.split()), item))
+    return [token for token in normalized.split() if token]
 
 
-def read_target_words(path: Path) -> Set[str]:
-    words = set()
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            normalized = normalize_lookup_text(line.strip())
-            if normalized:
-                words.add(normalized)
-    return words
+def sigmoid(value: float) -> float:
+    clipped = max(min(value, 35.0), -35.0)
+    return 1.0 / (1.0 + math.exp(-clipped))
 
 
-def read_hurtlex(path: Path) -> Set[str]:
-    lexicon = set()
-    with path.open("r", encoding="utf-8") as handle:
-        header_line = handle.readline().rstrip("\n")
-        headers = header_line.split("\t") if header_line else []
-        lemma_index = 0
-        for index, name in enumerate(headers):
-            if name.strip().lower() == "lemma":
-                lemma_index = index
-                break
-
-        for line in handle:
-            cols = line.rstrip("\n").split("\t")
-            if lemma_index < len(cols):
-                normalized = normalize_lookup_text(cols[lemma_index].strip())
-                if normalized:
-                    lexicon.add(normalized)
-    return lexicon
+def read_csv_rows(path: Path) -> List[Dict[str, str]]:
+    with path.open("r", encoding="utf-8-sig", newline="", errors="replace") as handle:
+        reader = csv.DictReader(handle)
+        rows: List[Dict[str, str]] = []
+        for row in reader:
+            normalized = {}
+            for key, value in row.items():
+                normalized[str(key or "").strip().lower()] = "" if value is None else str(value)
+            if any(value.strip() for value in normalized.values()):
+                rows.append(normalized)
+        return rows
 
 
 def col_letter_to_index(cell_ref: str) -> int:
@@ -177,17 +149,337 @@ def read_xlsx_rows(path: Path) -> List[Dict[str, str]]:
     return data_rows
 
 
+def read_dataset_rows(path: Path) -> List[Dict[str, str]]:
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        return read_csv_rows(path)
+    if suffix == ".xlsx":
+        return read_xlsx_rows(path)
+    raise PipelineConfigError(
+        f"Unsupported dataset format: {path}. Use a .csv or .xlsx dataset file."
+    )
+
+
+def detect_text_column(headers: Iterable[str]) -> Optional[str]:
+    candidates = [
+        "comment",
+        "tweet_text",
+        "tweet",
+        "text",
+        "content",
+        "message",
+        "post",
+    ]
+    header_set = list(headers)
+    for candidate in candidates:
+        if candidate in header_set:
+            return candidate
+    return None
+
+
+def detect_label_column(headers: Iterable[str]) -> Optional[str]:
+    candidates = [
+        "label",
+        "cyberbullying_type",
+        "cyberbullying",
+        "class",
+        "category",
+        "target",
+        "is_cyberbullying",
+    ]
+    header_set = list(headers)
+    for candidate in candidates:
+        if candidate in header_set:
+            return candidate
+    return None
+
+
+def normalize_binary_label(raw_value: object) -> Optional[int]:
+    text = str(raw_value or "").strip().lower()
+    if not text:
+        return None
+
+    negative_labels = {
+        "0",
+        "false",
+        "no",
+        "negative",
+        "not_cyberbullying",
+        "not cyberbullying",
+        "non_cyberbullying",
+        "non-cyberbullying",
+        "none",
+        "safe",
+    }
+    positive_labels = {
+        "1",
+        "true",
+        "yes",
+        "positive",
+        "cyberbullying",
+        "cyber_bullying",
+        "bullying",
+        "abusive",
+    }
+
+    if text in negative_labels:
+        return 0
+    if text in positive_labels:
+        return 1
+
+    try:
+        numeric = float(text)
+    except ValueError:
+        numeric = None
+    if numeric is not None:
+        if numeric <= 0:
+            return 0
+        if numeric >= 1:
+            return 1
+
+    if "not" in text and "cyber" in text:
+        return 0
+
+    return 1
+
+
+def prepare_labeled_rows(rows: Sequence[Dict[str, str]]) -> Tuple[List[Dict[str, object]], str, str]:
+    if not rows:
+        raise PipelineConfigError("The dataset is empty, so the TF-IDF model cannot be trained.")
+
+    text_column = detect_text_column(rows[0].keys())
+    label_column = detect_label_column(rows[0].keys())
+    if not text_column or not label_column:
+        raise PipelineConfigError(
+            "The dataset must include a text column (for example comment or tweet_text) "
+            "and a label column (for example label or cyberbullying_type)."
+        )
+
+    prepared: List[Dict[str, object]] = []
+    for row in rows:
+        text = str(row.get(text_column, "") or "").strip()
+        label = normalize_binary_label(row.get(label_column, ""))
+        if not text or label is None:
+            continue
+        prepared.append(
+            {
+                "comment": text,
+                "label": label,
+            }
+        )
+
+    if len(prepared) < 10:
+        raise PipelineConfigError("The dataset does not contain enough labeled rows to train the model.")
+
+    positives = sum(int(item["label"]) for item in prepared)
+    negatives = len(prepared) - positives
+    if positives == 0 or negatives == 0:
+        raise PipelineConfigError("The dataset needs both cyberbullying and non-cyberbullying examples.")
+
+    return prepared, text_column, label_column
+
+
+class TfidfVectorizer:
+    def __init__(self, max_features: int = 8000, min_df: int = 2):
+        self.max_features = max_features
+        self.min_df = min_df
+        self.vocabulary: Dict[str, int] = {}
+        self.idf: List[float] = []
+
+    def fit(self, documents: Sequence[str]) -> None:
+        document_frequency: Counter = Counter()
+        term_frequency: Counter = Counter()
+        total_documents = len(documents)
+
+        for document in documents:
+            tokens = tokenize_text(document)
+            if not tokens:
+                continue
+            unique_tokens = set(tokens)
+            document_frequency.update(unique_tokens)
+            term_frequency.update(tokens)
+
+        items = [
+            (term, df, term_frequency[term])
+            for term, df in document_frequency.items()
+            if df >= self.min_df
+        ]
+        items.sort(key=lambda item: (-item[1], -item[2], item[0]))
+        if self.max_features > 0:
+            items = items[: self.max_features]
+
+        self.vocabulary = {term: index for index, (term, _, _) in enumerate(items)}
+        self.idf = [0.0] * len(self.vocabulary)
+        for term, index in self.vocabulary.items():
+            df = document_frequency[term]
+            self.idf[index] = math.log((1.0 + total_documents) / (1.0 + df)) + 1.0
+
+    def transform_one(self, document: str) -> Dict[int, float]:
+        counts: Dict[int, int] = {}
+        for token in tokenize_text(document):
+            index = self.vocabulary.get(token)
+            if index is None:
+                continue
+            counts[index] = counts.get(index, 0) + 1
+
+        if not counts:
+            return {}
+
+        vector: Dict[int, float] = {}
+        norm = 0.0
+        for index, count in counts.items():
+            value = (1.0 + math.log(count)) * self.idf[index]
+            vector[index] = value
+            norm += value * value
+
+        if norm > 0.0:
+            scale = math.sqrt(norm)
+            for index in list(vector):
+                vector[index] = vector[index] / scale
+
+        return vector
+
+    def transform(self, documents: Sequence[str]) -> List[Dict[int, float]]:
+        return [self.transform_one(document) for document in documents]
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "max_features": self.max_features,
+            "min_df": self.min_df,
+            "vocabulary": self.vocabulary,
+            "idf": self.idf,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, object]) -> "TfidfVectorizer":
+        instance = cls(
+            max_features=int(payload.get("max_features", 8000)),
+            min_df=int(payload.get("min_df", 2)),
+        )
+        instance.vocabulary = {
+            str(term): int(index)
+            for term, index in dict(payload.get("vocabulary", {})).items()
+        }
+        instance.idf = [float(value) for value in list(payload.get("idf", []))]
+        return instance
+
+
+class LogisticRegressionClassifier:
+    def __init__(
+        self,
+        epochs: int = 6,
+        learning_rate: float = 0.35,
+        l2_penalty: float = 0.0005,
+        seed: int = 42,
+    ):
+        self.epochs = epochs
+        self.learning_rate = learning_rate
+        self.l2_penalty = l2_penalty
+        self.seed = seed
+        self.weights: List[float] = []
+        self.bias: float = 0.0
+
+    def fit(self, vectors: Sequence[Dict[int, float]], labels: Sequence[int], feature_count: int) -> None:
+        self.weights = [0.0] * feature_count
+        self.bias = 0.0
+        indices = list(range(len(vectors)))
+
+        for epoch in range(self.epochs):
+            learning_rate = self.learning_rate / (1.0 + (epoch * 0.35))
+            random.Random(self.seed + epoch).shuffle(indices)
+            for row_index in indices:
+                vector = vectors[row_index]
+                label = labels[row_index]
+                probability = self.predict_probability(vector)
+                error = probability - label
+                self.bias -= learning_rate * error
+                for feature_index, value in vector.items():
+                    gradient = (error * value) + (self.l2_penalty * self.weights[feature_index])
+                    self.weights[feature_index] -= learning_rate * gradient
+
+    def predict_probability(self, vector: Dict[int, float]) -> float:
+        score = self.bias
+        for feature_index, value in vector.items():
+            score += self.weights[feature_index] * value
+        return sigmoid(score)
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "epochs": self.epochs,
+            "learning_rate": self.learning_rate,
+            "l2_penalty": self.l2_penalty,
+            "seed": self.seed,
+            "weights": self.weights,
+            "bias": self.bias,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, object]) -> "LogisticRegressionClassifier":
+        instance = cls(
+            epochs=int(payload.get("epochs", 6)),
+            learning_rate=float(payload.get("learning_rate", 0.35)),
+            l2_penalty=float(payload.get("l2_penalty", 0.0005)),
+            seed=int(payload.get("seed", 42)),
+        )
+        instance.weights = [float(value) for value in list(payload.get("weights", []))]
+        instance.bias = float(payload.get("bias", 0.0))
+        return instance
+
+
+def split_dataset(rows: Sequence[Dict[str, object]], test_ratio: float = 0.2, seed: int = 42) -> Tuple[List[Dict[str, object]], List[Dict[str, object]]]:
+    indices = list(range(len(rows)))
+    random.Random(seed).shuffle(indices)
+    test_size = max(1, int(len(rows) * test_ratio))
+    test_indices = set(indices[:test_size])
+
+    train_rows = [rows[index] for index in indices if index not in test_indices]
+    test_rows = [rows[index] for index in indices if index in test_indices]
+    return train_rows, test_rows
+
+
+def evaluate_predictions(labels: Sequence[int], probabilities: Sequence[float]) -> Dict[str, float]:
+    if not labels:
+        return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0}
+
+    correct = 0
+    true_positive = 0
+    false_positive = 0
+    false_negative = 0
+
+    for label, probability in zip(labels, probabilities):
+        prediction = 1 if probability >= 0.5 else 0
+        if prediction == label:
+            correct += 1
+        if prediction == 1 and label == 1:
+            true_positive += 1
+        elif prediction == 1 and label == 0:
+            false_positive += 1
+        elif prediction == 0 and label == 1:
+            false_negative += 1
+
+    accuracy = correct / len(labels)
+    precision = true_positive / (true_positive + false_positive) if (true_positive + false_positive) else 0.0
+    recall = true_positive / (true_positive + false_negative) if (true_positive + false_negative) else 0.0
+    f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
+    return {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+    }
+
+
 class CyberbullyingPipeline:
     def __init__(self, dataset_path: Path, hurtlex_path: Path, target_path: Path):
         self.dataset_path = Path(dataset_path)
         self.hurtlex_path = Path(hurtlex_path)
         self.target_path = Path(target_path)
-        self.lexicon_words: Set[str] = set()
-        self.target_words: Set[str] = set()
-        self.lexicon_index: Dict[int, Set[str]] = {}
-        self.target_index: Dict[int, Set[str]] = {}
+        self.model_cache_path = self.dataset_path.parent / "tfidf_logreg_model.json"
+        self.vectorizer = TfidfVectorizer()
+        self.classifier = LogisticRegressionClassifier()
         self.records: List[Dict[str, object]] = []
         self.status: Dict[str, object] = {}
+        self.trained = False
 
     def _validate_required_file(self, path: Path, label: str) -> None:
         if path.exists() and path.is_file():
@@ -197,91 +489,148 @@ class CyberbullyingPipeline:
             f"Add the file to the repo or set the matching environment variable."
         )
 
-    def _load_detection_resources(self) -> None:
-        if self.lexicon_words and self.target_words:
+    def _dataset_signature(self) -> Dict[str, object]:
+        stat = self.dataset_path.stat()
+        return {
+            "path": str(self.dataset_path.resolve()),
+            "size": stat.st_size,
+            "mtime": stat.st_mtime,
+        }
+
+    def _load_cache(self) -> bool:
+        if not self.model_cache_path.exists():
+            return False
+
+        try:
+            payload = json.loads(self.model_cache_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+
+        signature = payload.get("dataset_signature", {})
+        current_signature = self._dataset_signature() if self.dataset_path.exists() else None
+        if payload.get("model_version") != MODEL_VERSION or signature != current_signature:
+            return False
+
+        self.vectorizer = TfidfVectorizer.from_dict(dict(payload.get("vectorizer", {})))
+        self.classifier = LogisticRegressionClassifier.from_dict(dict(payload.get("classifier", {})))
+        self.records = list(payload.get("records_preview", []))
+        self.status = dict(payload.get("status", {}))
+        self.status["model_cached"] = True
+        self.trained = True
+        return True
+
+    def _save_cache(self) -> None:
+        payload = {
+            "model_version": MODEL_VERSION,
+            "dataset_signature": self._dataset_signature(),
+            "vectorizer": self.vectorizer.to_dict(),
+            "classifier": self.classifier.to_dict(),
+            "records_preview": self.records[:200],
+            "status": self.status,
+        }
+        self.model_cache_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def _train_model(self) -> None:
+        self._validate_required_file(self.dataset_path, "dataset")
+        rows = read_dataset_rows(self.dataset_path)
+        prepared, text_column, label_column = prepare_labeled_rows(rows)
+        train_rows, test_rows = split_dataset(prepared)
+
+        train_texts = [str(row["comment"]) for row in train_rows]
+        train_labels = [int(row["label"]) for row in train_rows]
+        test_texts = [str(row["comment"]) for row in test_rows]
+        test_labels = [int(row["label"]) for row in test_rows]
+
+        self.vectorizer.fit(train_texts)
+        train_vectors = self.vectorizer.transform(train_texts)
+        test_vectors = self.vectorizer.transform(test_texts)
+        self.classifier.fit(train_vectors, train_labels, len(self.vectorizer.vocabulary))
+
+        train_probabilities = [self.classifier.predict_probability(vector) for vector in train_vectors]
+        test_probabilities = [self.classifier.predict_probability(vector) for vector in test_vectors]
+        train_metrics = evaluate_predictions(train_labels, train_probabilities)
+        test_metrics = evaluate_predictions(test_labels, test_probabilities)
+
+        positive_rows = sum(int(row["label"]) for row in prepared)
+        negative_rows = len(prepared) - positive_rows
+
+        self.records = prepared[:500]
+        self.status = {
+            "dataset_rows": len(prepared),
+            "cyberbullying_count": positive_rows,
+            "non_cyberbullying_count": negative_rows,
+            "dataset_loaded": True,
+            "dataset_path": str(self.dataset_path),
+            "model_cache_path": str(self.model_cache_path),
+            "model_cached": False,
+            "text_column": text_column,
+            "label_column": label_column,
+            "training_rows": len(train_rows),
+            "test_rows": len(test_rows),
+            "vocabulary_size": len(self.vectorizer.vocabulary),
+            "training_accuracy": train_metrics["accuracy"],
+            "test_accuracy": test_metrics["accuracy"],
+            "precision": test_metrics["precision"],
+            "recall": test_metrics["recall"],
+            "f1_score": test_metrics["f1"],
+            "model_name": "TF-IDF + Logistic Regression",
+            "rule": "Tweets are vectorized with TF-IDF features and classified with a logistic regression model.",
+        }
+        self._save_cache()
+        self.trained = True
+
+    def load(self) -> None:
+        if self.trained:
             return
 
-        self._validate_required_file(self.hurtlex_path, "HurtLex lexicon")
-        self._validate_required_file(self.target_path, "target indicators")
+        if self._load_cache():
+            return
 
-        self.lexicon_words = read_hurtlex(self.hurtlex_path)
-        self.target_words = read_target_words(self.target_path)
-        self.lexicon_index = build_phrase_index(sorted(self.lexicon_words))
-        self.target_index = build_phrase_index(sorted(self.target_words))
+        self._train_model()
 
     def analyze_text(self, text: str) -> Dict[str, object]:
-        self._load_detection_resources()
+        self.load()
         normalized = normalize_lookup_text(text)
-        lexicon_matches = find_phrase_matches(text, self.lexicon_index)
-        target_matches = find_phrase_matches(text, self.target_index)
-        is_cyberbullying = bool(lexicon_matches and target_matches)
+        vector = self.vectorizer.transform_one(text)
+        probability = self.classifier.predict_probability(vector) if vector else 0.0
+        is_cyberbullying = probability >= 0.5
+        confidence = probability if is_cyberbullying else (1.0 - probability)
+
+        top_tokens = []
+        token_counts = Counter(tokenize_text(text))
+        for token, _ in token_counts.most_common(8):
+            if token in self.vectorizer.vocabulary:
+                top_tokens.append(token)
 
         return {
             "comment": text,
             "normalized_text": normalized,
-            "lexicon_matches": lexicon_matches,
-            "target_matches": target_matches,
-            "lexicon_hit": bool(lexicon_matches),
-            "target_hit": bool(target_matches),
+            "active_tokens": top_tokens,
             "label": 1 if is_cyberbullying else 0,
-            "confidence": 100 if is_cyberbullying else 0,
+            "probability": probability,
+            "confidence": round(confidence * 100, 2),
             "result_text": "Cyberbullying Detected" if is_cyberbullying else "Not Cyberbullying",
-        }
-
-    def load(self) -> None:
-        self._load_detection_resources()
-
-        rows: List[Dict[str, str]] = []
-        dataset_loaded = self.dataset_path.exists() and self.dataset_path.is_file()
-        if dataset_loaded:
-            rows = read_xlsx_rows(self.dataset_path)
-
-        prepared = []
-        cyberbullying_count = 0
-
-        for row in rows:
-            comment = str(row.get("comment", "") or "").strip()
-            if not comment:
-                continue
-
-            analysis = self.analyze_text(comment)
-            prepared.append(
-                {
-                    "tweet_id": str(row.get("tweet_id", "") or ""),
-                    "username": str(row.get("username", "") or ""),
-                    "comment": comment,
-                    "label": analysis["label"],
-                }
-            )
-            cyberbullying_count += int(analysis["label"])
-
-        self.records = prepared
-        self.status = {
-            "dataset_rows": len(prepared),
-            "cyberbullying_count": cyberbullying_count,
-            "non_cyberbullying_count": len(prepared) - cyberbullying_count,
-            "hurtlex_entries": len(self.lexicon_words),
-            "target_entries": len(self.target_words),
-            "dataset_loaded": dataset_loaded,
-            "dataset_path": str(self.dataset_path),
-            "hurtlex_path": str(self.hurtlex_path),
-            "target_path": str(self.target_path),
-            "rule": "Cyberbullying is detected only when both a HurtLex word and a target indicator are found.",
         }
 
     def predict(self, comment: str) -> Dict[str, object]:
         return self.analyze_text(comment)
 
     def summary_text(self) -> str:
-        if not self.records:
-            self.load()
+        self.load()
         return "\n".join(
             [
+                f"Model: {self.status['model_name']}",
                 f"Rows: {self.status['dataset_rows']}",
                 f"Cyberbullying: {self.status['cyberbullying_count']}",
                 f"Non-Cyberbullying: {self.status['non_cyberbullying_count']}",
-                f"HurtLex entries: {self.status['hurtlex_entries']}",
-                f"Target indicators: {self.status['target_entries']}",
+                f"Training rows: {self.status['training_rows']}",
+                f"Test rows: {self.status['test_rows']}",
+                f"Vocabulary size: {self.status['vocabulary_size']}",
+                f"Training accuracy: {self.status['training_accuracy'] * 100:.2f}%",
+                f"Test accuracy: {self.status['test_accuracy'] * 100:.2f}%",
+                f"Precision: {self.status['precision'] * 100:.2f}%",
+                f"Recall: {self.status['recall'] * 100:.2f}%",
+                f"F1 score: {self.status['f1_score'] * 100:.2f}%",
                 f"Dataset loaded: {'yes' if self.status['dataset_loaded'] else 'no'}",
                 f"Rule: {self.status['rule']}",
             ]

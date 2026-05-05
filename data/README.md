@@ -4,15 +4,12 @@ This app is deployment-friendly when its supporting files live in this `data/` f
 
 ## Default files
 
-- `hurtlex_EN.tsv`: required for predictions
-- `target_indicators.txt`: required for predictions
-- `dataset.xlsx`: optional, used only to load the original dataset summary
+- `dataset.csv`: required for TF-IDF + Logistic Regression training
+- `hurtlex_EN.tsv`: optional legacy file
+- `target_indicators.txt`: optional legacy file
 
 ## Notes
 
-- The bundled `hurtlex_EN.tsv` is a small starter lexicon so the app can deploy and run immediately.
-- Replace it with your full HurtLex file if you want your research version of the detector.
-- You can also point the app to files outside the repo by setting:
-  - `HURTLEX_PATH`
-  - `TARGETS_PATH`
-  - `DATASET_PATH`
+- The app trains a local model and caches it as `tfidf_logreg_model.json` after the first run.
+- You can point the app to a different dataset outside the repo by setting `DATASET_PATH`.
+- The HurtLex and target files are kept only as legacy project resources.
