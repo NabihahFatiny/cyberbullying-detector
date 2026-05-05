@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Intelligent Real-Time Cyberbullying Detection System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── CSS Variables ─────────────────────────────────────────── */
+    :root {
+      --primary:       #2563eb;
+      --primary-dark:  #1d4ed8;
+      --primary-light: #dbeafe;
+      --danger:        #dc2626;
+      --danger-light:  #fee2e2;
+      --danger-dark:   #991b1b;
+      --success:       #16a34a;
+      --success-light: #dcfce7;
+      --warning:       #d97706;
+      --warning-light: #fef3c7;
+      --amber:         #f59e0b;
+      --purple:        #7c3aed;
+      --purple-light:  #ede9fe;
+      --gray-50:       #f9fafb;
+      --gray-100:      #f3f4f6;
+      --gray-200:      #e5e7eb;
+      --gray-300:      #d1d5db;
+      --gray-400:      #9ca3af;
+      --gray-500:      #6b7280;
+      --gray-600:      #4b5563;
+      --gray-700:      #374151;
+      --gray-800:      #1f2937;
+      --gray-900:      #111827;
+      --header-bg:     #0f172a;
+      --card-shadow:   0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1);
+      --card-shadow-lg:0 20px 25px -5px rgba(0,0,0,.1), 0 8px 10px -6px rgba(0,0,0,.1);
+      --radius:        12px;
+      --radius-sm:     8px;
+      --radius-lg:     16px;
+      --transition:    all .25s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ── Reset & Base ──────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-800);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Loading Overlay ───────────────────────────────────────── */
+    #loading-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, .65);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 20px;
+    }
+    #loading-overlay.visible { display: flex; }
+    .spinner {
+      width: 52px; height: 52px;
+      border: 4px solid rgba(255,255,255,.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .85s linear infinite;
+    }
+    .spinner-label {
+      color: #fff;
+      font-size: .95rem;
+      font-weight: 500;
+      letter-spacing: .03em;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Header ────────────────────────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
+      color: #fff;
+      padding: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(37,99,235,.25) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 50%, rgba(124,58,237,.2) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .header-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 24px 44px;
+      position: relative;
+      z-index: 1;
+    }
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(37,99,235,.3);
+      border: 1px solid rgba(37,99,235,.5);
+      color: #93c5fd;
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 100px;
+      margin-bottom: 16px;
+    }
+    .header-badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      background: #60a5fa;
+      border-radius: 50%;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: .5; transform: scale(.8); }
+    }
+    header h1 {
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 10px;
+      background: linear-gradient(135deg, #fff 0%, #93c5fd 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header p.subtitle {
+      font-size: 1rem;
+      color: #94a3b8;
+      max-width: 620px;
+      font-weight: 400;
+    }
+    .header-stats {
+      display: flex;
+      gap: 28px;
+      margin-top: 28px;
+      flex-wrap: wrap;
+    }
+    .hstat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .hstat-value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .hstat-label {
+      font-size: .72rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      font-weight: 500;
+    }
+
+    /* ── Main Layout ───────────────────────────────────────────── */
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+    @media (max-width: 820px) {
+      .container { grid-template-columns: 1fr; }
+    }
+
+    /* ── Cards ─────────────────────────────────────────────────── */
+    .card {
+      background: #fff;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--card-shadow);
+      border: 1px solid var(--gray-200);
+      overflow: hidden;
+      transition: var(--transition);
+    }
+    .card:hover { box-shadow: var(--card-shadow-lg); }
+    .card-header {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--gray-100);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .card-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+    .card-icon.blue  { background: var(--primary-light); }
+    .card-icon.purple{ background: var(--purple-light); }
+    .card-header h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--gray-900);
+    }
+    .card-header p {
+      font-size: .8rem;
+      color: var(--gray-500);
+      margin-top: 1px;
+    }
+    .card-body { padding: 24px; }
+
+    /* ── Input Section ─────────────────────────────────────────── */
+    #input-card { grid-column: 1 / -1; }
+    @media (max-width: 820px) { #input-card { grid-column: 1; } }
+
+    .input-label {
+      display: block;
+      font-size: .85rem;
+      font-weight: 600;
+      color: var(--gray-700);
+      margin-bottom: 8px;
+    }
+    .textarea-wrapper {
+      position: relative;
+    }
+    textarea#text-input {
+      width: 100%;
+      min-height: 130px;
+      padding: 14px 16px;
+      border: 2px solid var(--gray-200);
+      border-radius: var(--radius);
+      font-family: inherit;
+      font-size: .95rem;
+      color: var(--gray-800);
+      background: var(--gray-50);
+      resize: vertical;
+      transition: var(--transition);
+      line-height: 1.6;
+    }
+    textarea#text-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+    }
+    textarea#text-input::placeholder { color: var(--gray-400); }
+    .char-counter {
+      position: absolute;
+      bottom: 10px; right: 12px;
+      font-size: .72rem;
+      color: var(--gray-400);
+      pointer-events: none;
+    }
+    .char-counter.warn { color: var(--warning); }
+
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 11px 24px;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: var(--transition);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(37,99,235,.35);
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(37,99,235,.45);
+    }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-secondary {
+      background: var(--gray-100);
+      color: var(--gray-600);
+      border: 1px solid var(--gray-200);
+    }
+    .btn-secondary:hover {
+      background: var(--gray-200);
+      color: var(--gray-800);
+    }
+
+    /* ── Results Section ───────────────────────────────────────── */
+    #results-section {
+      display: none;
+      grid-column: 1 / -1;
+      animation: fadeSlideUp .4s ease both;
+    }
+    #results-section.visible { display: contents; }
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Detection Result Banner */
+    #detection-banner {
+      grid-column: 1 / -1;
+      border-radius: var(--radius-lg);
+      padding: 24px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+      animation: fadeSlideUp .4s ease both;
+    }
+    #detection-banner.danger {
+      background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);
+      box-shadow: 0 8px 24px rgba(220,38,38,.3);
+    }
+    #detection-banner.safe {
+      background: linear-gradient(135deg, #14532d 0%, #166534 100%);
+      box-shadow: 0 8px 24px rgba(22,163,74,.3);
+    }
+    .banner-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .banner-icon {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.15);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+    .banner-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: #fff;
+    }
+    .banner-sub {
+      font-size: .85rem;
+      color: rgba(255,255,255,.7);
+      margin-top: 2px;
+    }
+    .banner-right {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .banner-metric {
+      text-align: center;
+      min-width: 80px;
+    }
+    .banner-metric-value {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: #fff;
+      display: block;
+    }
+    .banner-metric-label {
+      font-size: .7rem;
+      color: rgba(255,255,255,.65);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      font-weight: 500;
+    }
+
+    /* Warning Box */
+    #warning-box {
+      grid-column: 1 / -1;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-left: 4px solid var(--amber);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      display: none;
+      align-items: flex-start;
+      gap: 12px;
+      animation: fadeSlideUp .4s ease .1s both;
+    }
+    #warning-box.visible { display: flex; }
+    .warning-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+    .warning-text { font-size: .9rem; color: #92400e; font-weight: 500; }
+
+    /* Metric Cards */
+    .metrics-row {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 600px) { .metrics-row { grid-template-columns: 1fr; } }
+
+    .metric-card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--card-shadow);
+      animation: fadeSlideUp .4s ease .15s both;
+    }
+    .metric-card-label {
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-weight: 600;
+      color: var(--gray-500);
+      margin-bottom: 10px;
+    }
+    .metric-card-value {
+      font-size: 1.9rem;
+      font-weight: 800;
+      color: var(--gray-900);
+      line-height: 1;
+    }
+    .metric-card-sub {
+      font-size: .78rem;
+      color: var(--gray-500);
+      margin-top: 4px;
+    }
+
+    /* Risk Level Badge in metric */
+    .risk-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 12px;
+      border-radius: 100px;
+      font-size: .8rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+      margin-top: 6px;
+    }
+    .risk-badge.High   { background: #fee2e2; color: #991b1b; }
+    .risk-badge.Medium { background: #fef3c7; color: #92400e; }
+    .risk-badge.Low    { background: #dcfce7; color: #166534; }
+    .risk-badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* Progress Bar */
+    .progress-wrapper {
+      grid-column: 1 / -1;
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      box-shadow: var(--card-shadow);
+      animation: fadeSlideUp .4s ease .2s both;
+    }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .progress-title {
+      font-size: .85rem;
+      font-weight: 600;
+      color: var(--gray-700);
+    }
+    .progress-pct {
+      font-size: .85rem;
+      font-weight: 700;
+      color: var(--gray-800);
+    }
+    .progress-track {
+      width: 100%;
+      height: 10px;
+      background: var(--gray-100);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 100px;
+      width: 0%;
+      transition: width 1s cubic-bezier(.4,0,.2,1), background .4s;
+    }
+    .progress-fill.High   { background: linear-gradient(90deg, #ef4444, #dc2626); }
+    .progress-fill.Medium { background: linear-gradient(90deg, #f59e0b, #d97706); }
+    .progress-fill.Low    { background: linear-gradient(90deg, #34d399, #16a34a); }
+    .progress-markers {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+    }
+    .progress-marker-text {
+      font-size: .67rem;
+      color: var(--gray-400);
+      font-weight: 500;
+    }
+
+    /* Highlighted Text Panel */
+    .highlight-panel {
+      grid-column: 1 / -1;
+      animation: fadeSlideUp .4s ease .25s both;
+    }
+    .highlight-body {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      font-size: .95rem;
+      line-height: 1.75;
+      color: var(--gray-800);
+      min-height: 60px;
+      word-break: break-word;
+    }
+    mark.offensive-mark {
+      background: #fee2e2;
+      color: #991b1b;
+      border-radius: 3px;
+      padding: 1px 3px;
+      font-weight: 600;
+      border-bottom: 2px solid #f87171;
+    }
+    mark.target-mark {
+      background: #dbeafe;
+      color: #1e40af;
+      border-radius: 3px;
+      padding: 1px 3px;
+      font-weight: 600;
+      border-bottom: 2px solid #60a5fa;
+    }
+    .legend {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .legend-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .78rem;
+      font-weight: 500;
+      color: var(--gray-600);
+    }
+    .legend-pill .dot {
+      width: 10px; height: 10px;
+      border-radius: 2px;
+    }
+    .legend-pill .dot.offensive { background: #f87171; }
+    .legend-pill .dot.target    { background: #60a5fa; }
+
+    /* Word Chip Columns */
+    .chips-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      animation: fadeSlideUp .4s ease .3s both;
+    }
+    @media (max-width: 600px) { .chips-grid { grid-template-columns: 1fr; } }
+
+    .chips-panel { animation: fadeSlideUp .4s ease .3s both; }
+    .chips-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-height: 40px;
+      padding: 12px;
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 12px;
+      border-radius: 100px;
+      font-size: .78rem;
+      font-weight: 600;
+    }
+    .chip.offensive { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .chip.target    { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .chips-empty {
+      font-size: .8rem;
+      color: var(--gray-400);
+      font-style: italic;
+      padding: 4px;
+    }
+
+    /* Rule Triggered Row */
+    .rule-row {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      box-shadow: var(--card-shadow);
+      animation: fadeSlideUp .4s ease .35s both;
+      flex-wrap: wrap;
+    }
+    .rule-label {
+      font-size: .85rem;
+      font-weight: 600;
+      color: var(--gray-700);
+    }
+    .rule-badge {
+      padding: 4px 14px;
+      border-radius: 100px;
+      font-size: .8rem;
+      font-weight: 700;
+    }
+    .rule-badge.yes { background: #fee2e2; color: #991b1b; }
+    .rule-badge.no  { background: #dcfce7; color: #166534; }
+    .rule-explanation {
+      font-size: .85rem;
+      color: var(--gray-600);
+      flex: 1;
+      min-width: 200px;
+    }
+
+    /* Safer Text */
+    #safer-section {
+      grid-column: 1 / -1;
+      display: none;
+      animation: fadeSlideUp .4s ease .4s both;
+    }
+    #safer-section.visible { display: block; }
+    .safer-body {
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      font-size: .95rem;
+      line-height: 1.7;
+      color: var(--gray-700);
+      min-height: 50px;
+      word-break: break-word;
+    }
+    span.replaced {
+      background: #e5e7eb;
+      color: var(--gray-500);
+      text-decoration: line-through;
+      border-radius: 3px;
+      padding: 1px 4px;
+      font-size: .88em;
+    }
+
+    /* Section title inside result cards */
+    .section-title {
+      font-size: .82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+
+    /* ── Footer ────────────────────────────────────────────────── */
+    footer {
+      background: var(--header-bg);
+      color: #64748b;
+      text-align: center;
+      padding: 24px;
+      font-size: .8rem;
+    }
+    footer strong { color: #94a3b8; }
+    .footer-pills {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .fpill {
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.08);
+      color: #64748b;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: .72rem;
+      font-weight: 500;
+    }
+
+    /* ── Utility ───────────────────────────────────────────────── */
+    .hidden { display: none !important; }
+    .mt-8  { margin-top: 8px; }
+    .mt-12 { margin-top: 12px; }
+    .mt-16 { margin-top: 16px; }
+  </style>
+</head>
+
+<body>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" role="status" aria-live="polite">
+    <div class="spinner"></div>
+    <p class="spinner-label">Analysing content&hellip;</p>
+  </div>
+
+  <!-- ── Header ──────────────────────────────────────────────── -->
+  <header>
+    <div class="header-inner">
+      <div class="header-badge">AI Content Safety</div>
+      <h1>Intelligent Real-Time Cyberbullying Detection System</h1>
+      <p class="subtitle">
+        Detects harmful, targeted language in real time using HurtLex lexicon matching,
+        NLP preprocessing, and logistic regression risk scoring.
+      </p>
+      <div class="header-stats">
+        <div class="hstat">
+          <span class="hstat-value">HurtLex</span>
+          <span class="hstat-label">Lexicon Engine</span>
+        </div>
+        <div class="hstat">
+          <span class="hstat-value">NLP</span>
+          <span class="hstat-label">Preprocessing</span>
+        </div>
+        <div class="hstat">
+          <span class="hstat-value">ML</span>
+          <span class="hstat-label">Risk Scoring</span>
+        </div>
+        <div class="hstat">
+          <span class="hstat-value">Real-Time</span>
+          <span class="hstat-label">Detection</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main Container ──────────────────────────────────────── -->
+  <main>
+    <div class="container">
+
+      <!-- Input Card (full width) -->
+      <div class="card" id="input-card">
+        <div class="card-header">
+          <div class="card-icon blue">&#9998;</div>
+          <div>
+            <h2>Input Section</h2>
+            <p>Enter an English tweet, comment, or message to check before posting.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <label class="input-label" for="text-input">Text Input</label>
+          <div class="textarea-wrapper">
+            <textarea
+              id="text-input"
+              rows="5"
+              placeholder="Type or paste a tweet, comment, or message here..."
+              maxlength="1000"
+              aria-label="Text to analyse"
+            ></textarea>
+            <span class="char-counter" id="char-counter">0 / 1000</span>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="detect-btn" type="button">
+              &#128269; Detect
+            </button>
+            <button class="btn btn-secondary" id="clear-btn" type="button">
+              &#10005; Clear
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Results (shown after analysis) ─────────────────── -->
+      <div id="results-section">
+
+        <!-- Detection Banner -->
+        <div id="detection-banner" class="safe">
+          <div class="banner-left">
+            <div class="banner-icon" id="banner-icon">&#9989;</div>
+            <div>
+              <div class="banner-title" id="banner-title">Safe Content</div>
+              <div class="banner-sub" id="banner-sub">No cyberbullying indicators found.</div>
+            </div>
+          </div>
+          <div class="banner-right">
+            <div class="banner-metric">
+              <span class="banner-metric-value" id="bm-risk">0%</span>
+              <span class="banner-metric-label">Risk Score</span>
+            </div>
+            <div class="banner-metric">
+              <span class="banner-metric-value" id="bm-conf">0.00</span>
+              <span class="banner-metric-label">Confidence</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Warning Box -->
+        <div id="warning-box">
+          <span class="warning-icon">&#9888;&#65039;</span>
+          <p class="warning-text" id="warning-text"></p>
+        </div>
+
+        <!-- Metric Cards -->
+        <div class="metrics-row">
+          <div class="metric-card">
+            <div class="metric-card-label">Risk Score</div>
+            <div class="metric-card-value" id="mc-risk-pct">0%</div>
+            <div class="metric-card-sub">Combined rule + ML score</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-card-label">Risk Level</div>
+            <div class="metric-card-value" style="font-size:1rem;padding-top:4px;">
+              <span class="risk-badge Low" id="mc-risk-level">Low</span>
+            </div>
+            <div class="metric-card-sub mt-8">Threshold: Low / Medium / High</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-card-label">Confidence Score</div>
+            <div class="metric-card-value" id="mc-conf">0.0000</div>
+            <div class="metric-card-sub">ML model probability</div>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="progress-wrapper">
+          <div class="progress-header">
+            <span class="progress-title">Risk Score Gauge</span>
+            <span class="progress-pct" id="progress-pct-label">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill Low" id="progress-fill"></div>
+          </div>
+          <div class="progress-markers">
+            <span class="progress-marker-text">0%</span>
+            <span class="progress-marker-text">Low &mdash; 30%</span>
+            <span class="progress-marker-text">Medium &mdash; 60%</span>
+            <span class="progress-marker-text">High &mdash; 100%</span>
+          </div>
+        </div>
+
+        <!-- Highlighted Text -->
+        <div class="card highlight-panel">
+          <div class="card-header">
+            <div class="card-icon blue">&#128269;</div>
+            <div>
+              <h2>Highlighted Input Text</h2>
+              <p>Colour-coded offensive and target words in original message.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="highlight-body" id="highlighted-text"></div>
+            <div class="legend">
+              <span class="legend-pill">
+                <span class="dot offensive"></span> Offensive / HurtLex word
+              </span>
+              <span class="legend-pill">
+                <span class="dot target"></span> Target indicator
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detected Words Grid -->
+        <div class="chips-grid">
+          <!-- Offensive Words -->
+          <div class="card chips-panel">
+            <div class="card-header">
+              <div class="card-icon" style="background:#fee2e2;">&#128683;</div>
+              <div>
+                <h2>Detected HurtLex Words</h2>
+                <p>From HurtLex offensive lexicon</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chips-container" id="offensive-chips">
+                <span class="chips-empty">None detected</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Target Indicators -->
+          <div class="card chips-panel">
+            <div class="card-header">
+              <div class="card-icon" style="background:#dbeafe;">&#127919;</div>
+              <div>
+                <h2>Detected Target Indicators</h2>
+                <p>Pronouns, mentions, addressing words</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chips-container" id="target-chips">
+                <span class="chips-empty">None detected</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rule + Explanation -->
+        <div class="rule-row">
+          <span class="rule-label">Rule Triggered:</span>
+          <span class="rule-badge no" id="rule-badge">No</span>
+          <span class="rule-explanation" id="rule-explanation">
+            Analysis explanation will appear here.
+          </span>
+        </div>
+
+        <!-- Safer Text -->
+        <div id="safer-section">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-icon" style="background:#dcfce7;">&#128216;</div>
+              <div>
+                <h2>Suggested Safer Text</h2>
+                <p>Offensive terms replaced, @mentions anonymised.</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="safer-body" id="safer-text"></div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- #results-section -->
+
+    </div><!-- .container -->
+  </main>
+
+  <!-- ── Footer ──────────────────────────────────────────────── -->
+  <footer>
+    <strong>Intelligent Real-Time Cyberbullying Detection System</strong>
+    <div class="footer-pills">
+      <span class="fpill">HurtLex Lexicon</span>
+      <span class="fpill">NLTK NLP Pipeline</span>
+      <span class="fpill">TF-IDF + Logistic Regression</span>
+      <span class="fpill">Flask REST API</span>
+      <span class="fpill">Rule-Based Detection</span>
+    </div>
+    <div style="margin-top:10px;font-size:.72rem;">
+      For research and demonstration purposes only.
+    </div>
+  </footer>
+
+  <!-- ── JavaScript ──────────────────────────────────────────── -->
+  <script>
+    'use strict';
+
+    /* ── DOM refs ──────────────────────────────────────────── */
+    const textInput       = document.getElementById('text-input');
+    const charCounter     = document.getElementById('char-counter');
+    const detectBtn       = document.getElementById('detect-btn');
+    const clearBtn        = document.getElementById('clear-btn');
+    const loadingOverlay  = document.getElementById('loading-overlay');
+    const resultsSection  = document.getElementById('results-section');
+
+    const detectionBanner = document.getElementById('detection-banner');
+    const bannerIcon      = document.getElementById('banner-icon');
+    const bannerTitle     = document.getElementById('banner-title');
+    const bannerSub       = document.getElementById('banner-sub');
+    const bmRisk          = document.getElementById('bm-risk');
+    const bmConf          = document.getElementById('bm-conf');
+
+    const warningBox      = document.getElementById('warning-box');
+    const warningText     = document.getElementById('warning-text');
+
+    const mcRiskPct       = document.getElementById('mc-risk-pct');
+    const mcRiskLevel     = document.getElementById('mc-risk-level');
+    const mcConf          = document.getElementById('mc-conf');
+
+    const progressFill    = document.getElementById('progress-fill');
+    const progressPctLbl  = document.getElementById('progress-pct-label');
+
+    const highlightedText = document.getElementById('highlighted-text');
+    const offensiveChips  = document.getElementById('offensive-chips');
+    const targetChips     = document.getElementById('target-chips');
+
+    const ruleBadge       = document.getElementById('rule-badge');
+    const ruleExplanation = document.getElementById('rule-explanation');
+
+    const saferSection    = document.getElementById('safer-section');
+    const saferText       = document.getElementById('safer-text');
+
+    /* ── Character counter ─────────────────────────────────── */
+    textInput.addEventListener('input', () => {
+      const len = textInput.value.length;
+      charCounter.textContent = `${len} / 1000`;
+      charCounter.classList.toggle('warn', len > 850);
+    });
+
+    /* ── Clear button ──────────────────────────────────────── */
+    clearBtn.addEventListener('click', () => {
+      textInput.value = '';
+      charCounter.textContent = '0 / 1000';
+      charCounter.classList.remove('warn');
+      resultsSection.classList.remove('visible');
+      resultsSection.style.display = 'none';
+      textInput.focus();
+    });
+
+    /* ── Build chips HTML ──────────────────────────────────── */
+    function buildChips(words, cssClass) {
+      if (!words || words.length === 0) {
+        return '<span class="chips-empty">None detected</span>';
+      }
+      return words
+        .map(w => `<span class="chip ${cssClass}">${escapeHtml(w)}</span>`)
+        .join('');
+    }
+
+    /* ── Escape HTML helper ────────────────────────────────── */
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(String(str)));
+      return div.innerHTML;
+    }
+
+    /* ── Animate progress bar ──────────────────────────────── */
+    function animateProgress(pct, level) {
+      progressFill.className = `progress-fill ${level}`;
+      progressPctLbl.textContent = `${pct}%`;
+      // Trigger reflow then animate
+      progressFill.style.width = '0%';
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          progressFill.style.width = `${pct}%`;
+        });
+      });
+    }
+
+    /* ── Render results ────────────────────────────────────── */
+    function renderResults(data) {
+      const isCyber = data.is_cyberbullying;
+      const level   = data.risk_level || 'Low';
+      const pct     = data.risk_score_percent || 0;
+
+      /* Banner */
+      detectionBanner.className = isCyber ? 'danger' : 'safe';
+      bannerIcon.textContent    = isCyber ? '⚠️' : '✅';
+      bannerTitle.textContent   = data.detection_result || (isCyber ? 'Cyberbullying Detected' : 'Safe Content');
+      bannerSub.textContent     = isCyber
+        ? 'Harmful language and targeting indicators found.'
+        : 'No cyberbullying indicators detected.';
+      bmRisk.textContent        = `${pct}%`;
+      bmConf.textContent        = (data.confidence_score || 0).toFixed(4);
+
+      /* Warning */
+      if (isCyber && data.warning) {
+        warningText.textContent = data.warning;
+        warningBox.classList.add('visible');
+      } else {
+        warningBox.classList.remove('visible');
+      }
+
+      /* Metric cards */
+      mcRiskPct.textContent  = `${pct}%`;
+      mcConf.textContent     = (data.confidence_score || 0).toFixed(4);
+
+      mcRiskLevel.textContent = level;
+      mcRiskLevel.className   = `risk-badge ${level}`;
+
+      /* Progress bar */
+      animateProgress(pct, level);
+
+      /* Highlighted text */
+      highlightedText.innerHTML = data.highlighted_text
+        ? data.highlighted_text
+        : escapeHtml(data.original_text || '');
+
+      /* Chips */
+      offensiveChips.innerHTML = buildChips(data.offensive_words, 'offensive');
+      targetChips.innerHTML    = buildChips(data.target_indicators, 'target');
+
+      /* Rule row */
+      const triggered = data.rule_triggered;
+      ruleBadge.textContent  = triggered ? 'Yes' : 'No';
+      ruleBadge.className    = `rule-badge ${triggered ? 'yes' : 'no'}`;
+      ruleExplanation.textContent = data.explanation || '';
+
+      /* Safer text */
+      if (isCyber && data.safer_text) {
+        saferText.innerHTML = data.safer_text;
+        saferSection.classList.add('visible');
+        saferSection.style.display = 'block';
+      } else {
+        saferSection.classList.remove('visible');
+        saferSection.style.display = 'none';
+      }
+
+      /* Show results */
+      resultsSection.style.display = 'contents';
+      resultsSection.classList.add('visible');
+
+      /* Scroll to results */
+      detectionBanner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    /* ── Show / hide loading ───────────────────────────────── */
+    function setLoading(on) {
+      loadingOverlay.classList.toggle('visible', on);
+    }
+
+    /* ── Detect button ─────────────────────────────────────── */
+    detectBtn.addEventListener('click', async () => {
+      const text = textInput.value.trim();
+      if (!text) {
+        textInput.focus();
+        textInput.style.borderColor = 'var(--danger)';
+        setTimeout(() => { textInput.style.borderColor = ''; }, 1500);
+        return;
+      }
+
+      setLoading(true);
+      detectBtn.disabled = true;
+
+      try {
+        const res = await fetch('/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Server error.' }));
+          throw new Error(err.error || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        renderResults(data);
+      } catch (err) {
+        alert('Analysis failed: ' + err.message);
+      } finally {
+        setLoading(false);
+        detectBtn.disabled = false;
+      }
+    });
+
+    /* ── Allow Ctrl+Enter / Cmd+Enter to submit ────────────── */
+    textInput.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        detectBtn.click();
+      }
+    });
+  </script>
+</body>
+</html>
