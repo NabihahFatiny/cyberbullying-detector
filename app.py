@@ -1,11 +1,11 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 import os
 
 app = Flask(__name__)
 
 @app.route('/')
 def index():
-    return "Cyberbullying Detector is working!"
+    return render_template('index.html')
 
 @app.route('/test')
 def test():
