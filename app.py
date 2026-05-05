@@ -381,4 +381,9 @@ def api_analyze():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    try:
+        from waitress import serve
+        print(f"Starting waitress on port {port}")
+        serve(app, host='0.0.0.0', port=port)
+    except ImportError:
+        app.run(host='0.0.0.0', port=port, debug=False)
