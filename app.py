@@ -380,7 +380,7 @@ def api_analyze():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 10000))
     try:
         from waitress import serve
         print(f"Starting waitress on port {port}")
