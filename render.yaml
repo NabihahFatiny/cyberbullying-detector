@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: cyberbullying-detector-2024
+    name: cyberbullying-detector-simple
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
