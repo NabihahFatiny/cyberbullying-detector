@@ -1,54 +1,67 @@
 from flask import Flask, jsonify, request, render_template
+from pathlib import Path
 import os
+from cyberbullying_app.pipeline import CyberbullyingPipeline
 
 app = Flask(__name__)
+
+BASE_DIR = Path(__file__).parent
+pipeline = CyberbullyingPipeline(
+    dataset_path=BASE_DIR / "data" / "dataset.csv",
+    hurtlex_path=BASE_DIR / "data" / "hurtlex_EN.tsv",
+    target_path=BASE_DIR / "data" / "target_indicators.txt",
+)
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+
 @app.route('/test')
 def test():
     return jsonify({"status": "working", "message": "API is functional"})
+
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
     data = request.get_json(silent=True) or {}
     text = data.get('text', '').strip()
-    
+
     if not text:
         return jsonify({'error': 'No text provided.'}), 400
-    
-    # Simple rule-based detection
-    has_target = any(word in text.lower() for word in ['you', 'your', 'u', 'ur'])
-    has_offensive = any(word in text.lower() for word in ['stupid', 'idiot', 'hate', 'ugly'])
-    
-    is_cyberbullying = has_target and has_offensive
-    
+
+    result = pipeline.analyze_text(text)
+
+    is_cyberbullying = bool(result['label'])
+    probability = float(result['probability'])
+    offensive_words = result['hurtlex_matches']
+    target_indicators = result['target_matches']
+
+    off_str = ", ".join(offensive_words) if offensive_words else "—"
+    tgt_str = ", ".join(target_indicators) if target_indicators else "—"
+
     if is_cyberbullying:
-        risk_score = 0.75
-        risk_level = "High"
+        explanation = f'Offensive word(s) detected: {off_str}. Target indicator(s) found: {tgt_str}.'
     else:
-        risk_score = 0.10
-        risk_level = "Low"
-    
+        explanation = 'No offensive language or direct targeting detected.'
+
     return jsonify({
-        'detection_result': 'Cyberbullying Detected' if is_cyberbullying else 'Safe Content',
+        'detection_result': result['result_text'],
         'is_cyberbullying': is_cyberbullying,
-        'risk_score_percent': int(risk_score * 100),
-        'risk_score': round(risk_score, 4),
-        'risk_level': risk_level,
-        'confidence_score': round(risk_score, 4),
-        'offensive_words': [word for word in ['stupid', 'idiot', 'hate', 'ugly'] if word in text.lower()],
-        'target_indicators': [word for word in ['you', 'your', 'u', 'ur'] if word in text.lower()],
-        'rule_triggered': is_cyberbullying,
-        'warning': 'This message may be harmful. Please revise before posting.' if is_cyberbullying else '',
-        'explanation': f'Offensive word(s) detected: {", ".join([word for word in ["stupid", "idiot", "hate", "ugly"] if word in text.lower()]) or "—"}. '
-                       f'Target indicator(s) found: {", ".join([word for word in ["you", "your", "u", "ur"] if word in text.lower()]) or "—"}.'
-                       if is_cyberbullying else 'No offensive language or direct targeting detected.',
+        'risk_score_percent': int(result['risk_score']),
+        'risk_score': round(probability, 4),
+        'risk_level': result['risk_level'],
+        'confidence_score': result['confidence_score'],
+        'offensive_words': offensive_words,
+        'target_indicators': target_indicators,
+        'rule_triggered': result['rule_triggered'],
+        'warning': result['warning_message'],
+        'explanation': explanation,
         'highlighted_text': text,
-        'safer_text': '',
+        'safer_text': result['safer_text'],
     })
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
