@@ -11,6 +11,7 @@ pipeline = CyberbullyingPipeline(
     hurtlex_path=BASE_DIR / "data" / "hurtlex_EN.tsv",
     target_path=BASE_DIR / "data" / "target_indicators.txt",
 )
+pipeline.load()
 
 
 @app.route('/')
