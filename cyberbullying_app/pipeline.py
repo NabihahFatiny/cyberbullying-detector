@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 
 
 XLSX_NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-MODEL_VERSION = 5
+MODEL_VERSION = 6
 SAFE_REPLACEMENTS = {
     "stupid": "thoughtless",
     "idiot": "person",
@@ -131,7 +131,9 @@ def lemmatize_token(token: str) -> str:
         base = token[:-2]
         return base[:-1] if len(base) > 2 and base[-1] == base[-2] else base
     if len(token) > 3 and token.endswith("es"):
-        return token[:-2]
+        stem = token[:-2]
+        if len(stem) >= 5:
+            return stem
     if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
         return token[:-1]
     return token
