@@ -1,6 +1,8 @@
 from flask import Flask, jsonify, request, render_template
 from pathlib import Path
+import html as html_lib
 import os
+import re
 from cyberbullying_app.pipeline import CyberbullyingPipeline
 
 app = Flask(__name__)
@@ -12,6 +14,44 @@ pipeline = CyberbullyingPipeline(
     target_path=BASE_DIR / "data" / "target_indicators.txt",
 )
 pipeline.load()
+
+
+def build_highlighted_html(text, offensive_words, target_words):
+    if not text:
+        return ""
+
+    spans = []
+    for word in offensive_words:
+        for m in re.finditer(re.escape(word), text, re.IGNORECASE):
+            spans.append((m.start(), m.end(), 'offensive'))
+    for word in target_words:
+        for m in re.finditer(re.escape(word), text, re.IGNORECASE):
+            spans.append((m.start(), m.end(), 'target'))
+
+    if not spans:
+        return html_lib.escape(text)
+
+    spans.sort(key=lambda s: (s[0], -(s[1] - s[0])))
+
+    merged = []
+    last_end = 0
+    for start, end, typ in spans:
+        if start >= last_end:
+            merged.append((start, end, typ))
+            last_end = end
+
+    result = []
+    pos = 0
+    for start, end, typ in merged:
+        if pos < start:
+            result.append(html_lib.escape(text[pos:start]))
+        css = 'offensive-mark' if typ == 'offensive' else 'target-mark'
+        result.append(f'<mark class="{css}">{html_lib.escape(text[start:end])}</mark>')
+        pos = end
+    if pos < len(text):
+        result.append(html_lib.escape(text[pos:]))
+
+    return ''.join(result)
 
 
 @app.route('/')
@@ -59,7 +99,7 @@ def analyze():
         'rule_triggered': result['rule_triggered'],
         'warning': result['warning_message'],
         'explanation': explanation,
-        'highlighted_text': text,
+        'highlighted_text': build_highlighted_html(text, offensive_words, target_indicators),
         'safer_text': result['safer_text'],
     })
 
