@@ -405,6 +405,57 @@
     .warning-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
     .warning-text { font-size: .9rem; color: #92400e; font-weight: 500; }
 
+    /* Model Disclaimer (always shown with every result) */
+    #model-disclaimer {
+      grid-column: 1 / -1;
+      background: #f1f5f9;
+      border: 1px solid var(--gray-200);
+      border-left: 4px solid #64748b;
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      display: none;
+      font-size: .82rem;
+      color: var(--gray-600);
+      line-height: 1.5;
+      animation: fadeSlideUp .4s ease .05s both;
+    }
+    #model-disclaimer.visible { display: block; }
+
+    /* Threshold Note (0.50-0.69 probability explanation) */
+    #threshold-note {
+      grid-column: 1 / -1;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-left: 4px solid #3b82f6;
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      display: none;
+      font-size: .82rem;
+      color: #1e40af;
+      line-height: 1.5;
+    }
+    #threshold-note.visible { display: block; }
+
+    /* Tooltip / info icon for output explanations */
+    .info-tip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--gray-200);
+      color: var(--gray-600);
+      font-size: .68rem;
+      font-style: normal;
+      font-weight: 700;
+      margin-left: 5px;
+      cursor: help;
+      vertical-align: middle;
+    }
+
+    .safer-empty { font-size: .88rem; color: var(--gray-500); font-style: italic; }
+
     /* Metric Cards */
     .metrics-row {
       grid-column: 1 / -1;
@@ -454,9 +505,9 @@
       letter-spacing: .03em;
       margin-top: 6px;
     }
-    .risk-badge.High   { background: #fee2e2; color: #991b1b; }
-    .risk-badge.Medium { background: #fef3c7; color: #92400e; }
-    .risk-badge.Low    { background: #dcfce7; color: #166534; }
+    .risk-badge.High     { background: #fee2e2; color: #991b1b; }
+    .risk-badge.Moderate { background: #fef3c7; color: #92400e; }
+    .risk-badge.Low      { background: #dcfce7; color: #166534; }
     .risk-badge::before {
       content: '';
       width: 6px; height: 6px;
@@ -503,9 +554,9 @@
       width: 0%;
       transition: width 1s cubic-bezier(.4,0,.2,1), background .4s;
     }
-    .progress-fill.High   { background: linear-gradient(90deg, #ef4444, #dc2626); }
-    .progress-fill.Medium { background: linear-gradient(90deg, #f59e0b, #d97706); }
-    .progress-fill.Low    { background: linear-gradient(90deg, #34d399, #16a34a); }
+    .progress-fill.High     { background: linear-gradient(90deg, #ef4444, #dc2626); }
+    .progress-fill.Moderate { background: linear-gradient(90deg, #f59e0b, #d97706); }
+    .progress-fill.Low      { background: linear-gradient(90deg, #34d399, #16a34a); }
     .progress-markers {
       display: flex;
       justify-content: space-between;
@@ -794,14 +845,14 @@
           <div class="banner-left">
             <div class="banner-icon" id="banner-icon">&#9989;</div>
             <div>
-              <div class="banner-title" id="banner-title">Safe Content</div>
-              <div class="banner-sub" id="banner-sub">No cyberbullying indicators found.</div>
+              <div class="banner-title" id="banner-title">Predicted as Non-Cyberbullying</div>
+              <div class="banner-sub" id="banner-sub">Logistic Regression probability is below 0.50.</div>
             </div>
           </div>
           <div class="banner-right">
             <div class="banner-metric">
               <span class="banner-metric-value" id="bm-risk">0%</span>
-              <span class="banner-metric-label">Risk Score</span>
+              <span class="banner-metric-label">Cyberbullying Probability</span>
             </div>
             <div class="banner-metric">
               <span class="banner-metric-value" id="bm-conf">0.00</span>
@@ -809,6 +860,12 @@
             </div>
           </div>
         </div>
+
+        <!-- Model Disclaimer (always shown) -->
+        <div id="model-disclaimer"></div>
+
+        <!-- Threshold Note (shown only when prediction and risk-level thresholds diverge) -->
+        <div id="threshold-note"></div>
 
         <!-- Warning Box -->
         <div id="warning-box">
@@ -819,28 +876,37 @@
         <!-- Metric Cards -->
         <div class="metrics-row">
           <div class="metric-card">
-            <div class="metric-card-label">Risk Score</div>
+            <div class="metric-card-label">
+              Cyberbullying Probability
+              <i class="info-tip" title="Logistic Regression Class 1 probability - the model's estimated likelihood that this text is cyberbullying, from 0% to 100%.">i</i>
+            </div>
             <div class="metric-card-value" id="mc-risk-pct">0%</div>
-            <div class="metric-card-sub">Combined rule + ML score</div>
+            <div class="metric-card-sub">Logistic Regression Class 1 probability</div>
           </div>
           <div class="metric-card">
-            <div class="metric-card-label">Risk Level</div>
+            <div class="metric-card-label">
+              Risk Level
+              <i class="info-tip" title="The model-estimated likelihood band of cyberbullying (Low / Moderate / High). This reflects prediction likelihood only, not actual harm or danger.">i</i>
+            </div>
             <div class="metric-card-value" style="font-size:1rem;padding-top:4px;">
               <span class="risk-badge Low" id="mc-risk-level">Low</span>
             </div>
-            <div class="metric-card-sub mt-8">Threshold: Low / Medium / High</div>
+            <div class="metric-card-sub mt-8">Threshold: Low / Moderate / High</div>
           </div>
           <div class="metric-card">
-            <div class="metric-card-label">Confidence Score</div>
+            <div class="metric-card-label">
+              Confidence Score
+              <i class="info-tip" title="How strongly the model favours its predicted class: max(probability, 1 - probability). High confidence can occur for either a Cyberbullying or a Non-Cyberbullying prediction.">i</i>
+            </div>
             <div class="metric-card-value" id="mc-conf">0.0000</div>
-            <div class="metric-card-sub">ML model probability</div>
+            <div class="metric-card-sub">Probability of the predicted class</div>
           </div>
         </div>
 
         <!-- Progress Bar -->
         <div class="progress-wrapper">
           <div class="progress-header">
-            <span class="progress-title">Risk Score Gauge</span>
+            <span class="progress-title">Cyberbullying Probability Gauge</span>
             <span class="progress-pct" id="progress-pct-label">0%</span>
           </div>
           <div class="progress-track">
@@ -849,7 +915,7 @@
           <div class="progress-markers">
             <span class="progress-marker-text">0%</span>
             <span class="progress-marker-text">Low &mdash; 30%</span>
-            <span class="progress-marker-text">Medium &mdash; 60%</span>
+            <span class="progress-marker-text">Moderate &mdash; 70%</span>
             <span class="progress-marker-text">High &mdash; 100%</span>
           </div>
         </div>
@@ -884,7 +950,7 @@
               <div class="card-icon" style="background:#fee2e2;">&#128683;</div>
               <div>
                 <h2>Detected HurtLex Words</h2>
-                <p>From HurtLex offensive lexicon</p>
+                <p>Supporting indicator only - from the HurtLex offensive lexicon, does not by itself decide the prediction.</p>
               </div>
             </div>
             <div class="card-body">
@@ -900,7 +966,7 @@
               <div class="card-icon" style="background:#dbeafe;">&#127919;</div>
               <div>
                 <h2>Detected Target Indicators</h2>
-                <p>Pronouns, mentions, addressing words</p>
+                <p>Supporting indicator only - pronouns, mentions, addressing words; does not by itself decide the prediction.</p>
               </div>
             </div>
             <div class="card-body">
@@ -913,7 +979,10 @@
 
         <!-- Rule + Explanation -->
         <div class="rule-row">
-          <span class="rule-label">Rule Triggered:</span>
+          <span class="rule-label">
+            Rule Triggered:
+            <i class="info-tip" title="Whether a HurtLex term AND a target indicator were both found. This is a supporting, informational signal only - it never overrides the Logistic Regression prediction shown above.">i</i>
+          </span>
           <span class="rule-badge no" id="rule-badge">No</span>
           <span class="rule-explanation" id="rule-explanation">
             Analysis explanation will appear here.
@@ -927,7 +996,7 @@
               <div class="card-icon" style="background:#dcfce7;">&#128216;</div>
               <div>
                 <h2>Suggested Safer Text</h2>
-                <p>Offensive terms replaced, @mentions anonymised.</p>
+                <p>Only terms with an explicitly reviewed safer alternative are replaced; @mentions are anonymised. This is an interface-level suggestion, not a change to the trained model.</p>
               </div>
             </div>
             <div class="card-body">
@@ -977,6 +1046,9 @@
 
     const warningBox      = document.getElementById('warning-box');
     const warningText     = document.getElementById('warning-text');
+
+    const modelDisclaimer = document.getElementById('model-disclaimer');
+    const thresholdNote   = document.getElementById('threshold-note');
 
     const mcRiskPct       = document.getElementById('mc-risk-pct');
     const mcRiskLevel     = document.getElementById('mc-risk-level');
@@ -1051,12 +1123,25 @@
       /* Banner */
       detectionBanner.className = isCyber ? 'danger' : 'safe';
       bannerIcon.textContent    = isCyber ? '⚠️' : '✅';
-      bannerTitle.textContent   = data.detection_result || (isCyber ? 'Cyberbullying Detected' : 'Safe Content');
+      bannerTitle.textContent   = data.detection_result || (isCyber ? 'Potential Cyberbullying' : 'Predicted as Non-Cyberbullying');
       bannerSub.textContent     = isCyber
-        ? 'Harmful language and targeting indicators found.'
-        : 'No cyberbullying indicators detected.';
+        ? 'Logistic Regression probability is 0.50 or higher.'
+        : 'Logistic Regression probability is below 0.50.';
       bmRisk.textContent        = `${pct}%`;
       bmConf.textContent        = (data.confidence_score || 0).toFixed(4);
+
+      /* Model disclaimer - always shown alongside every result */
+      modelDisclaimer.textContent = data.model_disclaimer ||
+        'This automated result is a model-generated indicator, not a confirmed judgment of cyberbullying or actual harm. Human review is recommended.';
+      modelDisclaimer.classList.add('visible');
+
+      /* Threshold note - only when prediction (>=0.50) and risk level (<0.70) use different cut-offs */
+      if (data.threshold_note) {
+        thresholdNote.textContent = data.threshold_note;
+        thresholdNote.classList.add('visible');
+      } else {
+        thresholdNote.classList.remove('visible');
+      }
 
       /* Warning */
       if (isCyber && data.warning) {
@@ -1091,9 +1176,15 @@
       ruleBadge.className    = `rule-badge ${triggered ? 'yes' : 'no'}`;
       ruleExplanation.textContent = data.explanation || '';
 
-      /* Safer text */
-      if (isCyber && data.safer_text) {
-        saferText.innerHTML = data.safer_text;
+      /* Safer text - only shown for a Cyberbullying prediction. If HurtLex
+         terms were detected but none have a reviewed safer alternative,
+         say so instead of masking or fabricating a rewrite. */
+      if (isCyber) {
+        if (data.safer_text) {
+          saferText.innerHTML = escapeHtml(data.safer_text);
+        } else {
+          saferText.innerHTML = '<span class="safer-empty">No reviewed safer-word alternative is available for the term(s) detected in this message. Please rewrite it manually.</span>';
+        }
         saferSection.classList.add('visible');
         saferSection.style.display = 'block';
       } else {

@@ -14,6 +14,10 @@ from xml.etree import ElementTree
 
 XLSX_NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 MODEL_VERSION = 6
+MODEL_DISCLAIMER = (
+    "This automated result is a model-generated indicator, not a confirmed "
+    "judgment of cyberbullying or actual harm. Human review is recommended."
+)
 SAFE_REPLACEMENTS = {
     # General insults
     "stupid": "thoughtless",
@@ -434,22 +438,31 @@ def read_hurtlex(path: Path) -> Set[str]:
 
 
 def soften_text(text: str, offensive_terms: Sequence[str]) -> str:
+    # Interface-level safeguard only - this does not touch the trained model,
+    # the HurtLex resource, or the pseudo-labelling rule used in the research
+    # methodology. It only rewrites terms that have an explicitly reviewed
+    # safer alternative in SAFE_REPLACEMENTS; anything else (e.g. "do",
+    # "did", "go") is left untouched rather than masked, so a plain word
+    # detected only because it happens to sit in HurtLex is never mangled
+    # into "***" inside an otherwise harmless sentence.
     updated = "" if text is None else str(text).strip()
     if not updated:
         return ""
 
     replaced = False
     for term in offensive_terms:
-        replacement = SAFE_REPLACEMENTS.get(term.lower(), "***")
+        replacement = SAFE_REPLACEMENTS.get(term.lower())
+        if replacement is None:
+            continue
         escaped = re.escape(term).replace(r"\ ", r"\s+")
         pattern = re.compile(rf"(?i)(?<!\w){escaped}(?!\w)")
         updated, count = pattern.subn(replacement, updated)
         replaced = replaced or bool(count)
 
-    updated = re.sub(r"\s+", " ", updated).strip()
-    if replaced:
-        return updated
-    return "Please rewrite this message in a respectful and constructive way before posting."
+    if not replaced:
+        return ""
+
+    return re.sub(r"\s+", " ", updated).strip()
 
 
 def format_match_text(items: Sequence[str], empty_message: str) -> str:
@@ -1046,17 +1059,32 @@ class CyberbullyingPipeline:
         cleaned_text = str(preprocessed["cleaned_text"])
         vector = self.vectorizer.transform_one(cleaned_text)
         probability = self.classifier.predict_probability(vector) if vector else 0.0
+
+        # The Logistic Regression Class-1 probability is the single source of
+        # truth for the predicted class, the displayed probability, the
+        # confidence score, and the risk level - so these four values can
+        # never contradict each other. HurtLex/target matches (rule_triggered
+        # above) remain supporting, informational indicators only; they are
+        # never used to override this prediction.
+        is_cyberbullying = probability >= 0.5
         risk_score = round(probability * 100, 2)
-        confidence_score = round(probability, 2)
+        confidence_score = round(max(probability, 1.0 - probability), 2)
 
         if probability < 0.3:
             risk_level = "Low"
         elif probability < 0.7:
-            risk_level = "Medium"
+            risk_level = "Moderate"
         else:
             risk_level = "High"
 
-        is_cyberbullying = rule_triggered
+        threshold_note = ""
+        if is_cyberbullying and risk_level == "Moderate":
+            threshold_note = (
+                "Prediction and risk level use different thresholds: this message is "
+                "classified as Cyberbullying because the probability is 0.50 or higher, "
+                "while the risk level shows Moderate because the probability is below 0.70."
+            )
+
         safer_text = soften_text(text, hurtlex_matches) if is_cyberbullying else ""
 
         return {
@@ -1072,9 +1100,11 @@ class CyberbullyingPipeline:
             "hurtlex_display": format_match_text(hurtlex_matches, "No offensive word detected"),
             "target_display": format_match_text(target_matches, "No target indicator detected"),
             "rule_triggered": rule_triggered,
+            "threshold_note": threshold_note,
             "warning_message": "This message may be harmful. Please revise before posting." if is_cyberbullying else "",
             "safer_text": safer_text,
-            "result_text": "Cyberbullying Detected" if is_cyberbullying else "Safe Content",
+            "model_disclaimer": MODEL_DISCLAIMER,
+            "result_text": "Potential Cyberbullying" if is_cyberbullying else "Predicted as Non-Cyberbullying",
         }
 
     def predict(self, comment: str) -> Dict[str, object]:
