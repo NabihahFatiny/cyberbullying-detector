@@ -1072,7 +1072,7 @@ class CyberbullyingPipeline:
             "hurtlex_display": format_match_text(hurtlex_matches, "No offensive word detected"),
             "target_display": format_match_text(target_matches, "No target indicator detected"),
             "rule_triggered": rule_triggered,
-            "warning_message": "⚠️ This message may be harmful. Please revise before posting." if is_cyberbullying else "",
+            "warning_message": "This message may be harmful. Please revise before posting." if is_cyberbullying else "",
             "safer_text": safer_text,
             "result_text": "Cyberbullying Detected" if is_cyberbullying else "Safe Content",
         }
