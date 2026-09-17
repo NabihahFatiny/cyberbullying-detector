@@ -887,9 +887,14 @@ class CyberbullyingPipeline:
         raise PipelineConfigError(f"Missing required {label} file.")
 
     def _dataset_signature(self) -> Dict[str, object]:
-        stat = self.dataset_path.stat()
+        # Read in universal-newline text mode so the signature is identical
+        # whether the file has CRLF (Windows checkout) or LF (Linux/Vercel
+        # checkout) line endings - git's autocrlf otherwise makes the raw
+        # byte size differ across platforms and invalidates the cache.
+        with self.dataset_path.open("r", encoding="utf-8-sig", errors="replace") as handle:
+            content = handle.read()
         return {
-            "size": stat.st_size,
+            "size": len(content),
         }
 
     def _load_rule_resources(self) -> None:
@@ -934,7 +939,13 @@ class CyberbullyingPipeline:
             "classifier": self.classifier.to_dict(),
             "status": self.status,
         }
-        self.model_cache_path.write_text(json.dumps(payload), encoding="utf-8")
+        try:
+            self.model_cache_path.write_text(json.dumps(payload), encoding="utf-8")
+        except OSError:
+            # Serverless runtimes (e.g. Vercel) mount the deployment
+            # read-only; keep the freshly trained in-memory model and
+            # just skip persisting the cache to disk.
+            pass
 
     def _train_model(self) -> None:
         self._validate_required_file(self.dataset_path, "dataset")
