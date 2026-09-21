@@ -18,134 +18,287 @@ MODEL_DISCLAIMER = (
     "This automated result is a model-generated indicator, not a confirmed "
     "judgment of cyberbullying or actual harm. Human review is recommended."
 )
-SAFE_REPLACEMENTS = {
-    # General insults
-    "stupid": "thoughtless",
-    "idiot": "person",
-    "dumb": "unclear",
-    "moron": "person",
-    "imbecile": "person",
-    "fool": "person",
-    "dimwit": "person",
-    "nitwit": "person",
-    "dunce": "person",
-    "airhead": "person",
-    "blockhead": "person",
-    "bonehead": "person",
-    "numbskull": "person",
-    "halfwit": "person",
-    "simpleton": "person",
-    "cretin": "person",
-    "buffoon": "person",
-    "dolt": "person",
-    "twit": "person",
-    "oaf": "person",
-    "clown": "person",
-    "nincompoop": "person",
-    "meathead": "person",
-    "knucklehead": "person",
-    "lunkhead": "person",
-    # Hatred / emotions
-    "hate": "strongly dislike",
-    "despise": "disagree with",
-    "loathe": "dislike",
-    "detest": "find challenging",
-    "abhor": "dislike",
-    # Appearance / body
-    "ugly": "unpleasant-looking",
-    "disgusting": "unpleasant",
-    "revolting": "unpleasant",
-    "hideous": "unpleasant",
-    "repulsive": "unpleasant",
-    "gross": "unpleasant",
-    "filthy": "unclean",
-    "nasty": "unkind",
-    "fat": "person",
-    "obese": "person",
-    "skinny": "person",
-    # Value judgments
-    "useless": "unhelpful",
-    "worthless": "unhelpful",
-    "pathetic": "struggling",
-    "hopeless": "struggling",
-    "terrible": "poor",
-    "awful": "poor",
-    "horrible": "unpleasant",
-    "dreadful": "poor",
-    "lousy": "poor",
-    "abysmal": "poor",
-    "atrocious": "poor",
-    "appalling": "poor",
-    "deplorable": "poor",
-    "wretched": "struggling",
-    "miserable": "struggling",
-    "pitiful": "struggling",
-    "lame": "unhelpful",
-    "inferior": "different",
-    "weak": "struggling",
-    "crappy": "poor",
-    "vile": "unpleasant",
-    # Derogatory terms for people
-    "loser": "person",
-    "trash": "person",
-    "garbage": "person",
-    "scum": "person",
-    "scumbag": "person",
-    "jerk": "person",
-    "freak": "person",
-    "weirdo": "person",
-    "creep": "person",
-    "pig": "person",
-    "rat": "person",
-    "coward": "person",
-    "wimp": "person",
-    "crybaby": "person",
-    "failure": "person",
-    "bum": "person",
-    "punk": "person",
-    "thug": "person",
-    "brat": "person",
-    "pest": "person",
-    # Gender / sexual slurs
-    "bitch": "person",
-    "whore": "person",
-    "slut": "person",
-    "hoe": "person",
-    "skank": "person",
-    "tramp": "person",
-    # Profanity used as insults
-    "bastard": "person",
-    "asshole": "person",
-    "jackass": "person",
-    "douchebag": "person",
-    "prick": "person",
-    "dick": "person",
-    "cunt": "person",
-    "ass": "person",
-    "jerk": "person",
-    # Violence / threats
-    "kill": "stop bothering",
-    "murder": "confront",
-    "hurt": "upset",
-    "destroy": "challenge",
-    "ruin": "affect",
-    "beat": "outperform",
-    "attack": "challenge",
-    "fight": "discuss",
-    "smash": "challenge",
-    "crush": "challenge",
-    "demolish": "challenge",
-    "harm": "upset",
-    "punish": "correct",
-    "destroy": "challenge",
-    "torture": "frustrate",
-    "stab": "confront",
-    "shoot": "confront",
-    "strangle": "confront",
-    "slap": "confront",
-    "punch": "confront",
-    "burn": "criticize",
+# Sentence-level rewrites for the safer-rewrite feature: instead of swapping
+# individual words in place (which reads as an edited insult, not a genuine
+# rewrite), each entry maps a flagged word to one complete, natural,
+# respectful sentence that addresses the underlying issue/behaviour rather
+# than the person - e.g. "idiot" -> "I disagree with your idea." HurtLex only
+# identifies which words are harmful here - it never supplies this wording,
+# and none of this affects the trained model's prediction.
+CURATED_SAFE_SENTENCES = {
+    # Intelligence-related insults
+    "idiot": "I disagree with your idea.",
+    "stupid": "I think you may have misunderstood the topic.",
+    "dumb": "Could you review the information again?",
+    "moron": "I do not agree with your answer.",
+    "fool": "I think that decision was unwise.",
+    "brainless": "Please think carefully before making a decision.",
+    "slow": "Please take your time and review the instructions.",
+    "witless": "Please think carefully before making a decision.",
+    "thickheaded": "Please think carefully before making a decision.",
+    "dense": "I think you may have misunderstood the topic.",
+    "imbecile": "I do not agree with your answer.",
+    "dimwit": "I do not agree with your answer.",
+    "nitwit": "I do not agree with your answer.",
+    "dunce": "I think that decision was unwise.",
+    "airhead": "I think you may have misunderstood the topic.",
+    "airheaded": "I think you may have misunderstood the topic.",
+    "blockhead": "I do not agree with your answer.",
+    "bonehead": "I do not agree with your answer.",
+    "numbskull": "I do not agree with your answer.",
+    "halfwit": "I do not agree with your answer.",
+    "simpleton": "I think that decision was unwise.",
+    "cretin": "I do not agree with your answer.",
+    "buffoon": "I do not think you are taking this discussion seriously.",
+    "dolt": "I do not agree with your answer.",
+    "twit": "I do not agree with your answer.",
+    "oaf": "I do not agree with your answer.",
+    "nincompoop": "I do not agree with your answer.",
+    "meathead": "I do not agree with your answer.",
+    "knucklehead": "I do not agree with your answer.",
+    "lunkhead": "I do not agree with your answer.",
+    "birdbrain": "I think you may have misunderstood the topic.",
+    "scatterbrain": "I think you may have misunderstood the topic.",
+    "dumbbell": "I do not agree with your answer.",
+    # Mockery / not taking things seriously
+    "clown": "I do not think you are taking this discussion seriously.",
+    "joke": "I do not think your response addresses the issue.",
+    # Appearance (mild only - see VIOLENT_THREAT_TERMS/PROFANITY_TERMS for the rest)
+    "ugly": "I should not comment negatively on someone's appearance.",
+    "hideous": "I should not comment negatively on someone's appearance.",
+    "freakish": "I should respect people's differences.",
+    "disgusting": "I found that unpleasant, but I should not comment on someone's appearance.",
+    "revolting": "I found that unpleasant, but I should not comment on someone's appearance.",
+    "repulsive": "I found that unpleasant, but I should not comment on someone's appearance.",
+    "gross": "I found that unpleasant, but I should not comment on someone's appearance.",
+    "filthy": "Your appearance seems untidy today.",
+    "unkempt": "Your appearance seems untidy today.",
+    "sloppy": "Your appearance seems untidy today.",
+    "scruffy": "Your appearance seems untidy today.",
+    "homely": "I should not comment negatively on someone's appearance.",
+    # Value judgments (about the person)
+    "worthless": "I think you can make a more positive contribution.",
+    "useless": "I think you can make a more positive contribution.",
+    "pathetic": "I am disappointed with what happened.",
+    "hopeless": "I am disappointed with what happened.",
+    "pitiful": "I am disappointed with what happened.",
+    "lame": "I think you can make a more positive contribution.",
+    "inferior": "I think you can make a more positive contribution.",
+    "weak": "I think this could be stronger.",
+    "feeble": "I think this could be stronger.",
+    "flimsy": "I think this could be stronger.",
+    "vile": "I found that unpleasant.",
+    "incompetent": "You may need more practice with this task.",
+    "unqualified": "You may need more practice with this task.",
+    "amateurish": "You may need more practice with this task.",
+    "mediocre": "You may need more practice with this task.",
+    "subpar": "You may need more practice with this task.",
+    "secondrate": "You may need more practice with this task.",
+    "terrible": "I am disappointed with what happened.",
+    "awful": "I am disappointed with what happened.",
+    "horrible": "I am disappointed with what happened.",
+    "dreadful": "I am disappointed with what happened.",
+    "lousy": "I am disappointed with what happened.",
+    "abysmal": "I am disappointed with what happened.",
+    "atrocious": "I am disappointed with what happened.",
+    "appalling": "I am disappointed with what happened.",
+    "deplorable": "I am disappointed with what happened.",
+    "wretched": "I am disappointed with what happened.",
+    "miserable": "I am disappointed with what happened.",
+    "crappy": "I am disappointed with what happened.",
+    "shoddy": "I am disappointed with what happened.",
+    # Someone's work/output specifically
+    "garbage": "Your work needs further improvement.",
+    "trash": "Your presentation could be improved with clearer information.",
+    # Difference / social exclusion
+    "freak": "I should respect people's differences.",
+    "weirdo": "I should respect people's differences.",
+    "misfit": "I should respect people's differences.",
+    "outcast": "Let us make sure everyone feels included.",
+    "sheep": "I encourage you to express your own opinion.",
+    "follower": "I encourage you to express your own opinion.",
+    # Fear / cowardice
+    "coward": "I understand that you may feel afraid.",
+    "cowardly": "I understand that you may feel afraid.",
+    "wimp": "I understand that you may feel afraid.",
+    "gutless": "I understand that you may feel afraid.",
+    "spineless": "I understand that you may feel afraid.",
+    "crybaby": "I understand that this situation may be upsetting.",
+    "whiny": "I understand that this situation may be upsetting.",
+    # Dishonesty
+    "liar": "I am not sure that the information you provided is accurate.",
+    "cheater": "I am concerned that the rules may not have been followed.",
+    "cheat": "I am concerned that the rules may not have been followed.",
+    "hypocrite": "Your actions seem inconsistent with what you said.",
+    "traitor": "I feel disappointed because you did not support the group.",
+    "fraud": "I am concerned that you may not be presenting accurate information.",
+    "fake": "I feel that your response may not be sincere.",
+    "phony": "I feel that your response may not be sincere.",
+    "scammer": "I am concerned that this offer may be misleading.",
+    "snake": "I am finding it difficult to trust your actions.",
+    "deceiver": "I am not sure that the information you provided is accurate.",
+    "swindler": "I am concerned that this offer may be misleading.",
+    "backstabber": "I am finding it difficult to trust your actions.",
+    "manipulator": "I am finding it difficult to trust your actions.",
+    "crook": "I am finding it difficult to trust your actions.",
+    "sneaky": "I am finding it difficult to trust your actions.",
+    "shady": "I am finding it difficult to trust your actions.",
+    "sketchy": "I am finding it difficult to trust your actions.",
+    "shifty": "I am finding it difficult to trust your actions.",
+    "underhanded": "I am concerned that the rules may not have been followed.",
+    "crooked": "I am not sure that the information you provided is accurate.",
+    "corrupt": "I am not sure that the information you provided is accurate.",
+    "unscrupulous": "I am concerned that the rules may not have been followed.",
+    # Laziness / low effort
+    "lazy": "I think you could contribute more effort to the task.",
+    "slacker": "Please complete your assigned part of the project.",
+    "slob": "Your appearance seems untidy today.",
+    "deadbeat": "I think you could contribute more effort to the task.",
+    "freeloader": "I would appreciate it if you contributed equally to the group.",
+    "parasite": "I would appreciate it if you contributed equally to the group.",
+    "leech": "I would appreciate it if you contributed equally to the group.",
+    "moocher": "I would appreciate it if you contributed equally to the group.",
+    # Arrogance
+    "arrogant": "Your response sounds overly confident.",
+    "conceited": "Your response sounds overly confident.",
+    "smug": "Your response sounds overly confident.",
+    "pompous": "Your response sounds overly confident.",
+    "snob": "Your response may make others feel excluded.",
+    "elitist": "Your response may make others feel excluded.",
+    "egotist": "Please allow others to share their achievements too.",
+    "narcissist": "Please allow others to share their achievements too.",
+    "braggart": "Please allow others to share their achievements too.",
+    "showoff": "Please allow others to share their achievements too.",
+    # Rudeness / meanness
+    "rude": "I found your response disrespectful.",
+    "obnoxious": "I found your response disrespectful.",
+    "mean": "Your words may hurt someone's feelings.",
+    "cruel": "Please consider how your actions may affect others.",
+    "heartless": "Please consider how your actions may affect others.",
+    "callous": "Please consider how your actions may affect others.",
+    "insensitive": "Please consider how your actions may affect others.",
+    "spiteful": "Please consider how your actions may affect others.",
+    "vindictive": "Please consider how your actions may affect others.",
+    "petty": "Please consider how your actions may affect others.",
+    "annoying": "I found your response disrespectful.",
+    "irritating": "I found your response disrespectful.",
+    "bossy": "Please allow others to share their opinions too.",
+    "pushy": "Please allow others to share their opinions too.",
+    # Immaturity
+    "childish": "I think this situation could be handled more maturely.",
+    "immature": "I think this situation could be handled more maturely.",
+    "babyish": "I think this situation could be handled more maturely.",
+    "brat": "I think this situation could be handled more maturely.",
+    "bratty": "I think this situation could be handled more maturely.",
+    "spoiled": "I think this situation could be handled more maturely.",
+    "needy": "I understand that this situation may be upsetting.",
+    "clingy": "I understand that this situation may be upsetting.",
+    "dramatic": "I think this could be discussed more calmly.",
+    "melodramatic": "I think this could be discussed more calmly.",
+    # Troublemaking / aggression (non-violent)
+    "troublemaker": "Your actions are disrupting the group.",
+    "delinquent": "Your actions are disrupting the group.",
+    "hooligan": "Your actions are disrupting the group.",
+    "nuisance": "Your actions are disrupting the group.",
+    "punk": "Your actions are disrupting the group.",
+    "thug": "Your actions are disrupting the group.",
+    "pest": "Your actions are disrupting the group.",
+    "bully": "Your behaviour is causing harm and needs to stop.",
+    "abuser": "Your behaviour is causing harm and needs to stop.",
+    "tormentor": "Your behaviour is causing harm and needs to stop.",
+    "oppressor": "Your behaviour is causing harm and needs to stop.",
+    "tyrant": "Your behaviour is causing harm and needs to stop.",
+    "menace": "Your behaviour is causing harm and needs to stop.",
+    # Greed / self-interest
+    "greedy": "Please consider sharing fairly with others.",
+    "stingy": "I would appreciate it if you were more willing to share.",
+    "miserly": "I would appreciate it if you were more willing to share.",
+    "selfish": "Please consider sharing fairly with others.",
+    "gluttonous": "Please consider sharing fairly with others.",
+    "vain": "Please allow others to share their achievements too.",
+    "envious": "Please consider how your actions may affect others.",
+    "jealous": "Please consider how your actions may affect others.",
+    # Gossip / privacy
+    "gossip": "Please avoid sharing other people's private information.",
+    "gossiper": "Please avoid sharing other people's private information.",
+    "busybody": "Please respect other people's privacy.",
+    "nosy": "Please respect other people's privacy.",
+    "snitch": "Please avoid sharing other people's private information.",
+    "tattletale": "Please avoid sharing other people's private information.",
+    # Boring / stubborn
+    "boring": "I am having difficulty staying engaged with this discussion.",
+    "dull": "I am having difficulty staying engaged with this discussion.",
+    "tedious": "I am having difficulty staying engaged with this discussion.",
+    "monotonous": "I am having difficulty staying engaged with this discussion.",
+    "bland": "I am having difficulty staying engaged with this discussion.",
+    "stubborn": "Please consider another point of view.",
+    "pigheaded": "Please consider another point of view.",
+    "obstinate": "Please consider another point of view.",
+    # Careless / disorganized
+    "careless": "Please take more care with this.",
+    "clumsy": "Please take more care with this.",
+    "chaotic": "This could be more organized.",
+    "klutz": "Please take more care with this.",
+    "dork": "I should respect people's differences.",
+    "dweeb": "I should respect people's differences.",
+    "pushover": "I understand that you may feel afraid.",
+    "doormat": "I understand that you may feel afraid.",
+    "scum": "I am disappointed with what happened.",
+    "scumbag": "I am disappointed with what happened.",
+    "creep": "I found your behaviour unpleasant.",
+    "rat": "I am finding it difficult to trust your actions.",
+    "pig": "I found your behaviour unpleasant.",
+    "loser": "I think you can make a more positive contribution.",
+    "failure": "I think you can make a more positive contribution.",
+    "bum": "I think you could contribute more effort to the task.",
+    "nasty": "I found your behaviour unpleasant.",
+    "hate": "I strongly disagree with this.",
+    "despise": "I strongly disagree with this.",
+    "loathe": "I strongly disagree with this.",
+    "detest": "I strongly disagree with this.",
+    "abhor": "I strongly disagree with this.",
 }
+
+# HurtLex's own category tags (the "category" column in hurtlex_EN.tsv, e.g.
+# "cds", "an", "qas"...) give a fallback sentence for any of the ~11,000
+# lexicon words not covered above, in the same natural "I" statement style,
+# extending coverage far beyond the curated list. Checked in this order so a
+# message matching several categories gets one consistent sentence.
+# Reference: Bassignana et al., "HurtLex: A Multilingual Lexicon of Words to
+# Hurt", CLiC-it 2018.
+HURTLEX_CATEGORY_PRIORITY = ["cds", "qas", "dmc", "svp", "re", "an", "or", "pa"]
+HURTLEX_CATEGORY_SENTENCES = {
+    "cds": "I do not agree with how that was expressed.",
+    "qas": "I think this could be discussed more constructively.",
+    "dmc": "I have concerns about that behaviour.",
+    "svp": "I think this could be approached differently.",
+    "re": "I have concerns about what happened.",
+    "an": "Please avoid name-calling and focus on the actual concern.",
+    "or": "Let's keep this conversation respectful.",
+    "pa": "Let's avoid judging someone by their job or role.",
+}
+
+# Any matched term in this set gets the safety-alert message below instead of
+# a softened sentence - HurtLex has no dedicated "violence" category (these
+# share the generic "re" crime category with harmless words like "liar"), so
+# this small, human-reviewed list is the only reliable way to catch genuine
+# threats. A softened rewrite of a threat would still be inappropriate to
+# suggest; the right response is to stop the post and flag it, not reword it.
+VIOLENT_THREAT_TERMS = {
+    "kill", "murder", "hurt", "destroy", "beat", "attack", "fight",
+    "smash", "crush", "demolish", "harm", "torture", "stab", "shoot",
+    "strangle", "slap", "punch", "burn",
+}
+VIOLENT_THREAT_MESSAGE = (
+    "Threatening language detected. Do not post this message and seek help "
+    "from a trusted adult immediately."
+)
+
+# Universal fallback whenever at least one harmful term was matched but it
+# isn't in the curated list or a rewritable HurtLex category (e.g. slurs and
+# strong profanity) - acknowledges the emotion without repeating the word or
+# leaving the box empty.
+GENERAL_CONCERN_SENTENCE = "I am upset, but I would like to discuss this calmly."
 STOPWORDS = {
     "a",
     "an",
@@ -437,32 +590,100 @@ def read_hurtlex(path: Path) -> Set[str]:
     return lexicon
 
 
-def soften_text(text: str, offensive_terms: Sequence[str]) -> str:
+def read_hurtlex_categories(path: Path) -> Dict[str, Set[str]]:
+    # Separate from read_hurtlex() on purpose: read_hurtlex()'s output feeds
+    # the actual detection/highlighting lexicon and must stay untouched. This
+    # reads the same file again just to capture each lemma's HurtLex
+    # "category" column, used only by build_safer_rewrite() below to pick a
+    # respectful rewrite template - it has no effect on matching or scoring.
+    #
+    # A lemma can legitimately appear under more than one HurtLex category
+    # (e.g. "whore" is tagged both "an" and the more severe "pr"), so every
+    # category a lemma is ever tagged with is kept, not just the first one
+    # seen in the file.
+    categories: Dict[str, Set[str]] = {}
+    with path.open("r", encoding="utf-8") as handle:
+        header_line = handle.readline().rstrip("\n")
+        headers = [item.strip().lower() for item in header_line.split("\t")] if header_line else []
+        lemma_index = None
+        for column_name in ("lemma", "term"):
+            if column_name in headers:
+                lemma_index = headers.index(column_name)
+                break
+        if lemma_index is None:
+            lemma_index = 0
+        category_index = headers.index("category") if "category" in headers else None
+        if category_index is None:
+            return categories
+
+        for line in handle:
+            cols = line.rstrip("\n").split("\t")
+            if lemma_index >= len(cols) or category_index >= len(cols):
+                continue
+            normalized = normalize_phrase(cols[lemma_index].strip(), lemmatize=True)
+            category = cols[category_index].strip().lower()
+            if normalized and category:
+                categories.setdefault(normalized, set()).add(category)
+    return categories
+
+
+_LEADING_ARTICLE_RE = re.compile(r"^(?:a|an|the)\s+(.+)$", re.IGNORECASE)
+
+
+def _resolve_safer_sentence(term: str, hurtlex_categories: Dict[str, Set[str]]) -> Optional[str]:
+    lowered = term.lower()
+    lemma = normalize_phrase(term, lemmatize=True) or lowered
+
+    curated = CURATED_SAFE_SENTENCES.get(lemma) or CURATED_SAFE_SENTENCES.get(lowered)
+    if curated:
+        return curated
+
+    # HurtLex sometimes lists a leading article as part of the lemma itself
+    # (e.g. "an idiot" is its own entry, separate from "idiot", tagged under
+    # its own - often noisier - set of categories), and the phrase matcher
+    # prefers that longer match. Try the content word alone first, since
+    # that's far more likely to hit a precise curated sentence than the
+    # combined phrase's own category tags.
+    article_match = _LEADING_ARTICLE_RE.match(term)
+    if article_match:
+        content_sentence = _resolve_safer_sentence(article_match.group(1), hurtlex_categories)
+        if content_sentence:
+            return content_sentence
+
+    term_categories = hurtlex_categories.get(lemma) or hurtlex_categories.get(lowered)
+    if term_categories:
+        for category in HURTLEX_CATEGORY_PRIORITY:
+            if category in term_categories:
+                return HURTLEX_CATEGORY_SENTENCES[category]
+
+    return None
+
+
+def build_safer_rewrite(offensive_terms: Sequence[str], hurtlex_categories: Dict[str, Set[str]]) -> str:
     # Interface-level safeguard only - this does not touch the trained model,
     # the HurtLex resource, or the pseudo-labelling rule used in the research
-    # methodology. It only rewrites terms that have an explicitly reviewed
-    # safer alternative in SAFE_REPLACEMENTS; anything else (e.g. "do",
-    # "did", "go") is left untouched rather than masked, so a plain word
-    # detected only because it happens to sit in HurtLex is never mangled
-    # into "***" inside an otherwise harmless sentence.
-    updated = "" if text is None else str(text).strip()
-    if not updated:
+    # methodology. Rather than editing the author's own wording (which still
+    # reads as an edited insult), this produces one complete, natural,
+    # respectful sentence addressing the underlying issue/behaviour instead
+    # of the person - e.g. "You are such an idiot." -> "I disagree with your
+    # idea." A genuine threat gets a distinct safety message instead of a
+    # softened rewrite, since rewording a threat would still be inappropriate
+    # to suggest. HurtLex only identifies which words are harmful; it never
+    # supplies this wording, and the message shown here never changes the
+    # student's original text.
+    if not offensive_terms:
         return ""
 
-    replaced = False
+    lowered_terms = {str(term).lower() for term in offensive_terms}
+    if lowered_terms & VIOLENT_THREAT_TERMS:
+        return VIOLENT_THREAT_MESSAGE
+
     for term in offensive_terms:
-        replacement = SAFE_REPLACEMENTS.get(term.lower())
-        if replacement is None:
-            continue
-        escaped = re.escape(term).replace(r"\ ", r"\s+")
-        pattern = re.compile(rf"(?i)(?<!\w){escaped}(?!\w)")
-        updated, count = pattern.subn(replacement, updated)
-        replaced = replaced or bool(count)
+        sentence = _resolve_safer_sentence(str(term), hurtlex_categories)
+        if sentence:
+            return sentence
 
-    if not replaced:
-        return ""
-
-    return re.sub(r"\s+", " ", updated).strip()
+    return GENERAL_CONCERN_SENTENCE
 
 
 def format_match_text(items: Sequence[str], empty_message: str) -> str:
@@ -891,6 +1112,7 @@ class CyberbullyingPipeline:
         self.lexicon_index: Dict[int, Set[str]] = {}
         self.lexicon_surface_index: Dict[int, Set[str]] = {}
         self.target_index: Dict[int, Set[str]] = {}
+        self.hurtlex_categories: Dict[str, Set[str]] = {}
         self.status: Dict[str, object] = {}
         self.trained = False
 
@@ -922,6 +1144,7 @@ class CyberbullyingPipeline:
         self.lexicon_index = build_phrase_index(sorted(self.lexicon_words), lemmatize=True)
         self.lexicon_surface_index = build_phrase_index(sorted(self.lexicon_words), lemmatize=False)
         self.target_index = build_phrase_index(sorted(self.target_words), lemmatize=False)
+        self.hurtlex_categories = read_hurtlex_categories(self.hurtlex_path)
 
     def _load_cache(self) -> bool:
         if not self.model_cache_path.exists():
@@ -1085,7 +1308,11 @@ class CyberbullyingPipeline:
                 "while the risk level shows Moderate because the probability is below 0.70."
             )
 
-        safer_text = soften_text(text, hurtlex_matches) if is_cyberbullying else ""
+        safer_text = (
+            build_safer_rewrite(hurtlex_matches, self.hurtlex_categories)
+            if is_cyberbullying
+            else ""
+        )
 
         return {
             "comment": text,

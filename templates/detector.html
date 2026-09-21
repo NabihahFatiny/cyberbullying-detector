@@ -693,7 +693,7 @@
               <div class="card-icon" style="background:#dcfce7;">&#128216;</div>
               <div>
                 <h2>Suggested Safer Text</h2>
-                <p>Only terms with an explicitly reviewed safer alternative are replaced; @mentions are anonymised. This is an interface-level suggestion, not a change to the trained model.</p>
+                <p>A complete, respectful sentence addressing the issue instead of the person. This is an interface-level suggestion only - it does not change your original message or the trained model's prediction.</p>
               </div>
             </div>
             <div class="card-body">
@@ -831,7 +831,7 @@
         if (data.safer_text) {
           saferText.innerHTML = escapeHtml(data.safer_text);
         } else {
-          saferText.innerHTML = '<span class="safer-empty">No reviewed safer-word alternative is available for the term(s) detected in this message. Please rewrite it manually.</span>';
+          saferText.innerHTML = '<span class="safer-empty">Please rephrase this message respectfully.</span>';
         }
         saferSection.classList.add('visible');
         saferSection.style.display = 'block';
