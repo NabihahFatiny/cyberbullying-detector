@@ -57,8 +57,28 @@ def build_highlighted_html(text, offensive_words, target_words):
 
 
 @app.route('/')
-def index():
+def home():
     return render_template('index.html')
+
+
+@app.route('/detector')
+def detector():
+    return render_template('detector.html')
+
+
+@app.route('/lessons')
+def lessons():
+    return render_template('lessons.html')
+
+
+@app.route('/scenarios')
+def scenarios():
+    return render_template('scenarios.html')
+
+
+@app.route('/myths')
+def myths():
+    return render_template('myths.html')
 
 
 @app.route('/test')

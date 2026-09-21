@@ -1,0 +1,322 @@
+{% extends 'base.html' %}
+{% block title %}Scenarios · Digital Citizenship &amp; Safety Hub{% endblock %}
+
+{% block extra_style %}
+    .scenario-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+      margin-bottom: 32px;
+    }
+    @media (max-width: 700px) { .scenario-grid { grid-template-columns: 1fr; } }
+
+    .scenario-card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--card-shadow);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .scenario-card h3 { font-size: .98rem; font-weight: 700; color: var(--gray-900); }
+    .scenario-card p { font-size: .85rem; color: var(--gray-500); flex: 1; }
+
+    .lesson-status.todo { background: var(--gray-100); color: var(--gray-500); }
+    .lesson-status.done { background: var(--success-light); color: var(--success); }
+    .lesson-status {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: .72rem; font-weight: 700; padding: 3px 10px;
+      border-radius: 100px; width: fit-content;
+    }
+
+    #scenario-viewer {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--card-shadow-lg);
+      padding: 28px;
+      margin-bottom: 40px;
+    }
+    .viewer-eyebrow { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--purple); margin-bottom: 6px; }
+    .viewer-title { font-size: 1.25rem; font-weight: 800; color: var(--gray-900); margin-bottom: 14px; }
+
+    .chat-context {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      margin-bottom: 18px;
+      font-size: .92rem;
+      color: var(--gray-700);
+      line-height: 1.6;
+    }
+    .chat-bubble {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-top: 10px;
+      font-size: .9rem;
+      font-style: italic;
+      color: var(--gray-600);
+    }
+
+    .reply-option {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: #fff;
+      border: 2px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font: inherit;
+      font-size: .92rem;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: var(--transition);
+    }
+    .reply-option:hover { border-color: var(--purple); }
+    .reply-option.selected-good { border-color: var(--success); background: var(--success-light); }
+    .reply-option.selected-neutral { border-color: var(--warning); background: var(--warning-light); }
+    .reply-option.selected-harmful { border-color: var(--danger); background: var(--danger-light); }
+    .reply-option:disabled { cursor: default; }
+
+    .feelings-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 4px; }
+    .feeling-chip {
+      background: var(--gray-50);
+      border: 2px solid var(--gray-200);
+      border-radius: 100px;
+      padding: 8px 16px;
+      font-size: .88rem;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .feeling-chip:hover { border-color: var(--purple); }
+    .feeling-chip.chosen { border-color: var(--purple); background: var(--purple-light); }
+
+    .scenario-feedback {
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: var(--radius);
+      font-size: .9rem;
+      display: none;
+      line-height: 1.55;
+    }
+    .scenario-feedback.visible { display: block; background: var(--primary-light); color: #1e40af; }
+
+    .viewer-actions { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+{% endblock %}
+
+{% block content %}
+
+  <header class="page-header">
+    <div class="page-header-inner">
+      <div class="page-badge">Scenario-Based Learning</div>
+      <h1>Practice with Realistic Learning Management System (LMS) Conversations</h1>
+      <p class="subtitle">Pick a reply, reflect on how it might feel, then see the better choice.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="scenario-grid" id="scenario-grid"></div>
+    <div id="scenario-viewer" class="hidden"></div>
+  </main>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+'use strict';
+
+const SCENARIOS = [
+  {
+    id: 'scenario-1',
+    title: 'Group Project Criticism',
+    summary: 'A teammate\'s slides have a few mistakes before the deadline.',
+    context: 'Your team is reviewing a shared slide deck a few minutes before submission. You notice Jordan\'s slides have a couple of factual errors.',
+    quote: 'Jordan: "Okay I think the deck is ready, submitting now!"',
+    replies: [
+      { text: 'These slides are a mess, did you even try?', quality: 'harmful' },
+      { text: 'There are some mistakes here.', quality: 'neutral' },
+      { text: 'I spotted a couple of factual errors — want me to send the corrections so we can fix them before submitting?', quality: 'good' },
+    ],
+    goodNote: 'Naming the specific problem and offering to help fixes the deck without making Jordan feel attacked under deadline pressure.',
+  },
+  {
+    id: 'scenario-2',
+    title: 'Mocking a Classmate\'s Phrasing',
+    summary: 'A classmate\'s forum post has a few grammar mistakes.',
+    context: 'A classmate who is a non-native English speaker posts a thoughtful reply in the discussion forum, with a couple of grammar mistakes.',
+    quote: 'Classmate: "I think their are two reason why this theory works..."',
+    replies: [
+      { text: 'Learn to write English properly lol', quality: 'harmful' },
+      { text: 'Your grammar is off in a few places.', quality: 'neutral' },
+      { text: 'Good points! Just a small note — "their" should be "there" in the second sentence. Keep it up!', quality: 'good' },
+    ],
+    goodNote: 'Leading with what\'s good, then offering a small correction, keeps the focus on ideas instead of language ability.',
+  },
+  {
+    id: 'scenario-3',
+    title: 'Group-Chat Pile-On',
+    summary: 'A teammate submits their part of the assignment late.',
+    context: 'Your project group chat notices a teammate submitted their part a day late, and a few members start joking about it.',
+    quote: 'Group chat: "lol typical, always late 🙄"',
+    replies: [
+      { text: 'Typical, always late. Useless teammate.', quality: 'harmful' },
+      { text: 'You\'re late again.', quality: 'neutral' },
+      { text: 'Everything okay? Let us know if you need help catching up.', quality: 'good' },
+    ],
+    goodNote: 'Checking in with concern instead of piling on gives the teammate a chance to explain and rebuild trust in the group.',
+  },
+  {
+    id: 'scenario-4',
+    title: 'Anonymous Forum Insult',
+    summary: 'An anonymous post targets low quiz scorers.',
+    context: 'An anonymous post appears in the class forum: "Whoever got the lowest score on the quiz should just drop the class." You see it and other students starting to reply.',
+    quote: 'Anonymous: "Whoever got the lowest score should just drop the class."',
+    replies: [
+      { text: 'Yeah for real, some people shouldn\'t even be in this course.', quality: 'harmful' },
+      { text: 'Scroll past and say nothing.', quality: 'neutral' },
+      { text: 'That\'s not fair to say — everyone learns at their own pace. Let\'s keep this thread supportive.', quality: 'good' },
+    ],
+    goodNote: 'Speaking up as a bystander — rather than joining in or staying silent — is what turns the thread around for whoever is being targeted.',
+  },
+];
+
+const FEELINGS = [
+  { id: 'hurt', label: '😢 Hurt' },
+  { id: 'confused', label: '😕 Confused' },
+  { id: 'neutral', label: '😐 Neutral' },
+  { id: 'supported', label: '🙂 Supported' },
+];
+
+const scenarioGrid = document.getElementById('scenario-grid');
+const viewer = document.getElementById('scenario-viewer');
+
+/* Completion is tracked only in memory for this page visit (not saved) so
+   that a shared/public computer never shows one visitor's progress to the
+   next - refreshing the page resets it, which is intentional. */
+const completedThisVisit = new Set();
+
+function renderGrid() {
+  scenarioGrid.innerHTML = SCENARIOS.map((sc, i) => {
+    const done = completedThisVisit.has(sc.id);
+    return `
+      <div class="scenario-card">
+        <span class="lesson-status ${done ? 'done' : 'todo'}">${done ? '✓ Completed' : 'Not started'}</span>
+        <h3>${sc.title}</h3>
+        <p>${sc.summary}</p>
+        <button class="btn btn-primary" data-scenario-index="${i}">${done ? 'Replay Scenario' : 'Start Scenario'}</button>
+      </div>
+    `;
+  }).join('');
+  scenarioGrid.querySelectorAll('button[data-scenario-index]').forEach((btn) => {
+    btn.addEventListener('click', () => openScenario(parseInt(btn.dataset.scenarioIndex, 10)));
+  });
+}
+
+function openScenario(index) {
+  const sc = SCENARIOS[index];
+  scenarioGrid.classList.add('hidden');
+  viewer.classList.remove('hidden');
+  renderReplyStep(sc);
+  viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderReplyStep(sc) {
+  viewer.innerHTML = `
+    <div class="viewer-eyebrow">Scenario</div>
+    <div class="viewer-title">${sc.title}</div>
+    <div class="chat-context">
+      ${sc.context}
+      <div class="chat-bubble">${sc.quote}</div>
+    </div>
+    <p style="font-weight:700;font-size:.9rem;color:var(--gray-700);margin-bottom:10px;">How would you reply?</p>
+    <div id="reply-options"></div>
+  `;
+  const wrap = document.getElementById('reply-options');
+  const shuffled = sc.replies.map((r, i) => ({ ...r, i })).sort(() => Math.random() - 0.5);
+  shuffled.forEach((opt) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'reply-option';
+    b.textContent = '"' + opt.text + '"';
+    b.addEventListener('click', () => {
+      wrap.querySelectorAll('.reply-option').forEach((el) => { el.disabled = true; });
+      b.classList.add('selected-' + opt.quality);
+      setTimeout(() => renderReflectionStep(sc, opt), 250);
+    });
+    wrap.appendChild(b);
+  });
+}
+
+function renderReflectionStep(sc, chosenReply) {
+  viewer.innerHTML = `
+    <div class="viewer-eyebrow">Emotion Reflection</div>
+    <div class="viewer-title">How might the receiver feel after reading this message?</div>
+    <div class="chat-bubble">Your reply: "${chosenReply.text}"</div>
+    <div class="feelings-row" id="feelings-row"></div>
+    <div class="viewer-actions" id="reflection-actions" style="display:none;">
+      <button class="btn btn-primary" id="to-feedback-btn">See Feedback</button>
+    </div>
+  `;
+  const row = document.getElementById('feelings-row');
+  FEELINGS.forEach((f) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'feeling-chip';
+    chip.textContent = f.label;
+    chip.addEventListener('click', () => {
+      row.querySelectorAll('.feeling-chip').forEach((c) => c.classList.remove('chosen'));
+      chip.classList.add('chosen');
+      document.getElementById('reflection-actions').style.display = 'flex';
+    });
+    row.appendChild(chip);
+  });
+  document.getElementById('to-feedback-btn').addEventListener('click', () => renderFeedbackStep(sc, chosenReply));
+}
+
+function renderFeedbackStep(sc, chosenReply) {
+  const isGood = chosenReply.quality === 'good';
+  const message = isGood
+    ? 'You picked the respectful reply. ' + sc.goodNote
+    : 'The most respectful reply here was: "' + sc.replies.find((r) => r.quality === 'good').text + '" — ' + sc.goodNote;
+
+  viewer.innerHTML = `
+    <div class="viewer-eyebrow">Feedback</div>
+    <div class="viewer-title">${isGood ? '🎉 Great choice' : '💡 Worth a rethink'}</div>
+    <div class="scenario-feedback visible">${message}</div>
+    <div class="viewer-actions">
+      <button class="btn btn-primary" id="next-scenario-btn">Continue</button>
+      <button class="btn btn-secondary" id="back-to-grid-btn">Back to Scenarios</button>
+    </div>
+  `;
+
+  completedThisVisit.add(sc.id);
+  renderGrid();
+
+  const idx = SCENARIOS.findIndex((s) => s.id === sc.id);
+  const nextIdx = idx + 1 < SCENARIOS.length ? idx + 1 : null;
+  const nextBtn = document.getElementById('next-scenario-btn');
+  if (nextIdx === null) {
+    nextBtn.textContent = 'Back to Scenarios';
+    nextBtn.addEventListener('click', closeViewer);
+  } else {
+    nextBtn.addEventListener('click', () => openScenario(nextIdx));
+  }
+  document.getElementById('back-to-grid-btn').addEventListener('click', closeViewer);
+}
+
+function closeViewer() {
+  viewer.classList.add('hidden');
+  viewer.innerHTML = '';
+  scenarioGrid.classList.remove('hidden');
+  renderGrid();
+  scenarioGrid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+renderGrid();
+</script>
+{% endblock %}

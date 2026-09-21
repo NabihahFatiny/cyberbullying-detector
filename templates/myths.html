@@ -1,0 +1,403 @@
+{% extends 'base.html' %}
+{% block title %}Myth or Fact Challenge · Digital Citizenship &amp; Safety Hub{% endblock %}
+
+{% block extra_style %}
+    .game-wrap {
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    .game-hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: .85rem;
+      font-weight: 700;
+      color: var(--gray-600);
+    }
+    .game-hud .score { color: var(--primary); }
+
+    .game-progress-track {
+      height: 10px;
+      background: var(--gray-100);
+      border-radius: 100px;
+      overflow: hidden;
+      margin-bottom: 28px;
+    }
+    .game-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--purple));
+      border-radius: 100px;
+      width: 0%;
+      transition: width .4s cubic-bezier(.4,0,.2,1);
+    }
+
+    .statement-card {
+      position: relative;
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--card-shadow-lg);
+      padding: 44px 28px;
+      text-align: center;
+      margin-bottom: 22px;
+      overflow: hidden;
+    }
+    .statement-eyebrow {
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--gray-400);
+      margin-bottom: 14px;
+    }
+    .statement-text {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--gray-900);
+      line-height: 1.5;
+    }
+
+    .answer-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 560px) {
+      .answer-row { grid-template-columns: 1fr; }
+      .statement-card { padding: 32px 20px; }
+      .statement-text { font-size: 1.1rem; }
+    }
+
+    .answer-btn {
+      padding: 24px 16px;
+      border-radius: var(--radius-lg);
+      font-size: 1.15rem;
+      font-weight: 800;
+      font-family: inherit;
+      border: 3px solid var(--gray-200);
+      background: #fff;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .answer-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: var(--card-shadow-lg);
+    }
+    .answer-btn:disabled { cursor: default; }
+    .answer-btn.myth { color: var(--danger); }
+    .answer-btn.fact { color: var(--success); }
+    .answer-btn.correct-pick { border-color: var(--success); background: var(--success-light); }
+    .answer-btn.wrong-pick { border-color: var(--danger); background: var(--danger-light); }
+    .answer-btn.reveal-correct { border-color: var(--success); background: var(--success-light); }
+
+    .result-banner {
+      text-align: center;
+      font-weight: 800;
+      font-size: 1.1rem;
+      margin-bottom: 12px;
+      display: none;
+    }
+    .result-banner.visible { display: block; }
+    .result-banner.correct { color: var(--success); }
+    .result-banner.incorrect { color: var(--danger); }
+
+    .explanation-box {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-left: 4px solid var(--primary);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      font-size: .92rem;
+      color: var(--gray-700);
+      line-height: 1.55;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .explanation-box.visible { display: block; }
+
+    .next-btn-wrap { text-align: center; display: none; }
+    .next-btn-wrap.visible { display: block; }
+
+    /* Celebration burst on a correct answer - a few emoji that float up and fade */
+    .celebrate-emoji {
+      position: absolute;
+      font-size: 1.5rem;
+      top: 50%;
+      pointer-events: none;
+      animation: celebrateFloat 900ms ease-out forwards;
+    }
+    @keyframes celebrateFloat {
+      0%   { opacity: 1; transform: translateY(0) scale(.8); }
+      100% { opacity: 0; transform: translateY(-70px) scale(1.3); }
+    }
+
+    /* End screen */
+    .end-card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--card-shadow-lg);
+      padding: 44px 28px;
+      text-align: center;
+    }
+    .end-eyebrow { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--gray-400); margin-bottom: 10px; }
+    .end-score { font-size: 2.6rem; font-weight: 800; color: var(--gray-900); }
+    .end-score-sub { font-size: .9rem; color: var(--gray-500); margin-top: 4px; }
+    .end-level {
+      display: inline-block;
+      margin-top: 18px;
+      padding: 9px 22px;
+      border-radius: 100px;
+      font-weight: 800;
+      font-size: 1rem;
+    }
+    .end-level.expert  { background: var(--success-light); color: var(--success); }
+    .end-level.citizen { background: var(--primary-light); color: var(--primary-dark); }
+    .end-level.keep-learning { background: var(--warning-light); color: var(--warning); }
+    .end-desc { margin-top: 10px; font-size: .88rem; color: var(--gray-500); }
+    .end-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 28px;
+      flex-wrap: wrap;
+    }
+
+    .hidden { display: none !important; }
+{% endblock %}
+
+{% block content %}
+
+  <header class="page-header">
+    <div class="page-header-inner">
+      <div class="page-badge">Myth or Fact Challenge</div>
+      <h1>Test what you know</h1>
+      <p class="subtitle">Read each statement and decide: is it a myth, or a fact?</p>
+    </div>
+  </header>
+
+  <main class="container game-wrap">
+
+    <div id="game-screen">
+      <div class="game-hud">
+        <span id="hud-question">Question 1 of 8</span>
+        <span class="score">Score: <span id="hud-score">0</span> pts</span>
+      </div>
+      <div class="game-progress-track">
+        <div class="game-progress-fill" id="game-progress-fill"></div>
+      </div>
+
+      <div class="statement-card" id="statement-card">
+        <div class="statement-eyebrow">Myth or Fact?</div>
+        <div class="statement-text" id="statement-text"></div>
+      </div>
+
+      <div class="answer-row">
+        <button type="button" class="answer-btn myth" id="myth-btn">🚫 MYTH</button>
+        <button type="button" class="answer-btn fact" id="fact-btn">✅ FACT</button>
+      </div>
+
+      <div class="result-banner" id="result-banner"></div>
+      <div class="explanation-box" id="explanation-box"></div>
+      <div class="next-btn-wrap" id="next-btn-wrap">
+        <button type="button" class="btn btn-primary" id="next-btn">Next Question</button>
+      </div>
+    </div>
+
+    <div id="end-screen" class="hidden">
+      <div class="end-card">
+        <div class="end-eyebrow">Challenge Complete</div>
+        <div class="end-score" id="end-score">0 pts</div>
+        <div class="end-score-sub" id="end-correct">0 / 8 correct</div>
+        <div class="end-level" id="end-level">Keep Learning</div>
+        <div class="end-desc" id="end-desc"></div>
+        <div class="end-actions">
+          <button type="button" class="btn btn-primary" id="play-again-btn">🔁 Play Again</button>
+          <a class="btn btn-secondary" id="continue-detector-btn" href="{{ url_for('detector') }}">🔍 Continue to Detector</a>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+'use strict';
+
+const QUESTIONS = [
+  { statement: 'It\'s only a joke online, so it can\'t really be cyberbullying.', isMyth: true,
+    explanation: 'Myth! Repeated harmful jokes can still become cyberbullying, especially when the target doesn\'t find it funny.' },
+  { statement: 'Only kids and teenagers get cyberbullied.', isMyth: true,
+    explanation: 'Myth! Anyone can be targeted — including university students and adults in online courses or forums.' },
+  { statement: 'Ignoring a harmful comment will always make it stop.', isMyth: true,
+    explanation: 'Myth! Ignoring sometimes helps, but repeated harassment often needs reporting or intervention to actually stop.' },
+  { statement: 'Deleting a hurtful comment fixes everything.', isMyth: true,
+    explanation: 'Myth! Deleting doesn\'t undo the emotional impact — an apology and a change in behaviour matter more.' },
+  { statement: 'Online harassment can cause real anxiety and emotional harm.', isMyth: false,
+    explanation: 'Fact! Text-based harassment is linked to real stress, anxiety, and lasting emotional effects, even though it happens on a screen.' },
+  { statement: 'Reporting a harmful comment helps keep the learning environment safe.', isMyth: false,
+    explanation: 'Fact! Reporting harmful behaviour is a responsible action, not overreacting — it helps protect everyone, including you.' },
+  { statement: 'Respectful disagreement is a normal part of healthy discussion.', isMyth: false,
+    explanation: 'Fact! Disagreeing with an idea isn\'t bullying — it becomes harmful only when it attacks the person instead of the argument.' },
+  { statement: 'A single severe or threatening message can count as cyberbullying.', isMyth: false,
+    explanation: 'Fact! Cyberbullying doesn\'t always need to be repeated — one serious threat can be enough to cause real harm.' },
+];
+
+const POINTS_PER_CORRECT = 10;
+
+const gameScreen   = document.getElementById('game-screen');
+const endScreen    = document.getElementById('end-screen');
+const hudQuestion  = document.getElementById('hud-question');
+const hudScore     = document.getElementById('hud-score');
+const progressFill = document.getElementById('game-progress-fill');
+const statementCard = document.getElementById('statement-card');
+const statementText = document.getElementById('statement-text');
+const mythBtn      = document.getElementById('myth-btn');
+const factBtn      = document.getElementById('fact-btn');
+const resultBanner = document.getElementById('result-banner');
+const explanationBox = document.getElementById('explanation-box');
+const nextBtnWrap   = document.getElementById('next-btn-wrap');
+const nextBtn        = document.getElementById('next-btn');
+
+let order = [];
+let current = 0;
+let score = 0;
+let correctCount = 0;
+let answered = false;
+
+function shuffled(list) {
+  const arr = list.slice();
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function startGame() {
+  order = shuffled(QUESTIONS.map((_, i) => i));
+  current = 0;
+  score = 0;
+  correctCount = 0;
+  endScreen.classList.add('hidden');
+  gameScreen.classList.remove('hidden');
+  renderQuestion();
+}
+
+function renderQuestion() {
+  answered = false;
+  const q = QUESTIONS[order[current]];
+
+  hudQuestion.textContent = `Question ${current + 1} of ${QUESTIONS.length}`;
+  hudScore.textContent = score;
+  progressFill.style.width = `${(current / QUESTIONS.length) * 100}%`;
+
+  statementText.textContent = q.statement;
+
+  [mythBtn, factBtn].forEach((btn) => {
+    btn.disabled = false;
+    btn.classList.remove('correct-pick', 'wrong-pick', 'reveal-correct');
+  });
+
+  resultBanner.className = 'result-banner';
+  resultBanner.textContent = '';
+  explanationBox.className = 'explanation-box';
+  explanationBox.textContent = '';
+  nextBtnWrap.classList.remove('visible');
+  nextBtn.textContent = current + 1 === QUESTIONS.length ? 'See Results' : 'Next Question';
+}
+
+function spawnCelebration() {
+  const emojis = ['🎉', '⭐', '✨', '🎊'];
+  for (let i = 0; i < 5; i++) {
+    const el = document.createElement('span');
+    el.className = 'celebrate-emoji';
+    el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+    el.style.left = `${10 + Math.random() * 80}%`;
+    el.style.animationDelay = `${Math.random() * 150}ms`;
+    statementCard.appendChild(el);
+    setTimeout(() => el.remove(), 1200);
+  }
+}
+
+function selectAnswer(pickedIsMyth) {
+  if (answered) return;
+  answered = true;
+
+  const q = QUESTIONS[order[current]];
+  const isCorrect = pickedIsMyth === q.isMyth;
+  const pickedBtn = pickedIsMyth ? mythBtn : factBtn;
+  const correctBtn = q.isMyth ? mythBtn : factBtn;
+
+  mythBtn.disabled = true;
+  factBtn.disabled = true;
+
+  if (isCorrect) {
+    score += POINTS_PER_CORRECT;
+    correctCount++;
+    pickedBtn.classList.add('correct-pick');
+    spawnCelebration();
+    resultBanner.textContent = '✅ Correct!';
+    resultBanner.className = 'result-banner visible correct';
+  } else {
+    pickedBtn.classList.add('wrong-pick');
+    correctBtn.classList.add('reveal-correct');
+    resultBanner.textContent = '❌ Not quite';
+    resultBanner.className = 'result-banner visible incorrect';
+  }
+
+  explanationBox.textContent = q.explanation;
+  explanationBox.className = 'explanation-box visible';
+
+  hudScore.textContent = score;
+  progressFill.style.width = `${((current + 1) / QUESTIONS.length) * 100}%`;
+
+  nextBtnWrap.classList.add('visible');
+}
+
+function goToNext() {
+  current++;
+  if (current >= QUESTIONS.length) {
+    showResults();
+  } else {
+    renderQuestion();
+  }
+}
+
+function levelFor(correct) {
+  if (correct >= 7) return { key: 'expert', name: '🛡️ Digital Safety Expert', desc: 'Excellent! You have a strong understanding of respectful online behaviour.' };
+  if (correct >= 5) return { key: 'citizen', name: '🎓 Smart Digital Citizen', desc: 'Good work! You know most of the key ideas — a little more practice will make you an expert.' };
+  return { key: 'keep-learning', name: '📚 Keep Learning', desc: 'A good start! Revisit the Lessons and Scenarios pages, then try the challenge again.' };
+}
+
+function showResults() {
+  gameScreen.classList.add('hidden');
+  endScreen.classList.remove('hidden');
+
+  document.getElementById('end-score').textContent = `${score} pts`;
+  document.getElementById('end-correct').textContent = `${correctCount} / ${QUESTIONS.length} correct`;
+
+  const level = levelFor(correctCount);
+  const levelEl = document.getElementById('end-level');
+  levelEl.textContent = level.name;
+  levelEl.className = `end-level ${level.key}`;
+  document.getElementById('end-desc').textContent = level.desc;
+}
+
+mythBtn.addEventListener('click', () => selectAnswer(true));
+factBtn.addEventListener('click', () => selectAnswer(false));
+nextBtn.addEventListener('click', goToNext);
+document.getElementById('play-again-btn').addEventListener('click', startGame);
+
+startGame();
+</script>
+{% endblock %}

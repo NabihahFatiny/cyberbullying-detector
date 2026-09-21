@@ -1,0 +1,433 @@
+{% extends 'base.html' %}
+{% block title %}Lessons · Digital Citizenship &amp; Safety Hub{% endblock %}
+
+{% block extra_style %}
+    .lesson-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-bottom: 32px;
+    }
+    @media (max-width: 820px) { .lesson-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .lesson-grid { grid-template-columns: 1fr; } }
+
+    .lesson-card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--card-shadow);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .lesson-card .icon { font-size: 1.6rem; }
+    .lesson-card h3 { font-size: .98rem; font-weight: 700; color: var(--gray-900); }
+    .lesson-card p { font-size: .82rem; color: var(--gray-500); flex: 1; }
+    .lesson-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: .72rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 100px;
+      width: fit-content;
+    }
+    .lesson-status.todo { background: var(--gray-100); color: var(--gray-500); }
+    .lesson-status.done { background: var(--success-light); color: var(--success); }
+
+    #lesson-viewer {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--card-shadow-lg);
+      padding: 28px;
+      margin-bottom: 40px;
+    }
+    .viewer-eyebrow { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--primary); margin-bottom: 6px; }
+    .viewer-title { font-size: 1.3rem; font-weight: 800; color: var(--gray-900); margin-bottom: 14px; }
+    .viewer-body p { margin-bottom: 12px; color: var(--gray-700); font-size: .95rem; line-height: 1.65; }
+    .viewer-body ul { margin: 0 0 12px 20px; color: var(--gray-700); font-size: .95rem; line-height: 1.65; }
+
+    .situation-box {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      margin-bottom: 16px;
+      font-size: .95rem;
+      color: var(--gray-700);
+    }
+    .situation-box strong { display: block; margin-bottom: 4px; color: var(--gray-500); font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; }
+
+    .reply-option {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: #fff;
+      border: 2px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font: inherit;
+      font-size: .92rem;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: var(--transition);
+    }
+    .reply-option:hover { border-color: var(--primary); }
+    .reply-option.correct { border-color: var(--success); background: var(--success-light); }
+    .reply-option.incorrect { border-color: var(--danger); background: var(--danger-light); }
+    .reply-option:disabled { cursor: default; }
+
+    .scenario-feedback {
+      margin-top: 10px;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-size: .88rem;
+      display: none;
+    }
+    .scenario-feedback.visible { display: block; }
+    .scenario-feedback.good { background: var(--success-light); color: #166534; }
+    .scenario-feedback.bad  { background: var(--danger-light); color: var(--danger-dark); }
+
+    .quiz-question { margin-bottom: 22px; }
+    .quiz-question p.q-text { font-weight: 700; color: var(--gray-800); margin-bottom: 10px; font-size: .92rem; }
+    .quiz-choice {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+      font-size: .88rem;
+      cursor: pointer;
+    }
+    .quiz-choice:hover { background: var(--gray-50); }
+    .quiz-choice.correct { background: var(--success-light); border-color: var(--success); }
+    .quiz-choice.incorrect { background: var(--danger-light); border-color: var(--danger); }
+
+    .quiz-score-banner {
+      background: var(--primary-light);
+      color: var(--primary-dark);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .quiz-score-banner.visible { display: block; }
+
+    .viewer-actions { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+{% endblock %}
+
+{% block content %}
+
+  <header class="page-header">
+    <div class="page-header-inner">
+      <div class="page-badge">5-Minute Micro Lessons</div>
+      <h1>Learn the “why” before you post</h1>
+      <p class="subtitle">Five short modules — each with a quick scenario and a 2-question quiz.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="lesson-grid" id="lesson-grid"></div>
+    <div id="lesson-viewer" class="hidden"></div>
+  </main>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+'use strict';
+
+const LESSONS = [
+  {
+    id: 'understanding-cb',
+    icon: '🧭',
+    title: 'Understanding Cyberbullying',
+    summary: 'Recognize harmful online behaviour.',
+    content: [
+      'Cyberbullying is repeated or intentionally harmful online behaviour — like mocking someone\'s grades in a forum or excluding them from group chats on purpose. Even one severe or threatening message can count.'
+    ],
+    scenario: {
+      situation: 'A classmate writes in the class forum: "lol you clearly didn\'t even read the chapter."',
+      options: [
+        { text: 'Wow, you can\'t even read simple instructions — embarrassing.', respectful: false,
+          feedback: 'This pile-on adds humiliation instead of addressing the mix-up. Avoid mocking a classmate in a public thread.' },
+        { text: 'I think there might be a mix-up — want me to point out the section I used?', respectful: true,
+          feedback: 'This assumes good faith and offers help instead of judgment — exactly the kind of reply that keeps a discussion safe.' },
+      ],
+    },
+    quiz: [
+      {
+        q: 'Which best defines cyberbullying?',
+        options: ['Any disagreement online', 'Repeated or intentional harmful behaviour online targeting a person', 'A single spelling mistake in a post'],
+        correct: 1,
+      },
+      {
+        q: 'In an LMS discussion, which of these is an example of cyberbullying?',
+        options: ['Pointing out a factual error politely', 'Repeatedly mocking a classmate\'s answers in the class forum', 'Asking a clarifying question'],
+        correct: 1,
+      },
+    ],
+  },
+  {
+    id: 'types-harmful',
+    icon: '🚫',
+    title: 'Types of Harmful Comments',
+    summary: 'Identify insults, harassment, humiliation, threats.',
+    content: [
+      'Harmful comments usually fall into insults, humiliation, harassment, or threats. A joke that keeps going after someone asks you to stop is harassment, not "banter".'
+    ],
+    scenario: {
+      situation: 'A classmate accidentally posts their low quiz score to the group chat.',
+      options: [
+        { text: 'LOL you failed? That\'s actually hilarious, everyone look.', respectful: false,
+          feedback: 'This is humiliation — drawing public attention to someone\'s mistake to embarrass them.' },
+        { text: 'Scores don\'t define you — want to study together before the next one?', respectful: true,
+          feedback: 'This responds with support instead of ridicule, and turns the moment into something constructive.' },
+      ],
+    },
+    quiz: [
+      { q: 'Which category best matches "You\'re too stupid to understand this assignment"?', options: ['Insult', 'Helpful feedback', 'Compliment'], correct: 0 },
+      { q: '"If you don\'t fix this I\'ll make sure everyone in class hates you" is an example of:', options: ['A threat', 'A joke', 'A compliment'], correct: 0 },
+    ],
+  },
+  {
+    id: 'respectful-discussion',
+    icon: '💬',
+    title: 'Respectful Academic Discussion',
+    summary: 'Practice constructive feedback.',
+    content: [
+      'Constructive feedback focuses on the idea, not the person — be specific and offer an alternative instead of just pointing out what\'s wrong.'
+    ],
+    scenario: {
+      situation: 'A classmate gives an incorrect answer to a maths question.',
+      options: [
+        { text: 'You\'re so stupid.', respectful: false,
+          feedback: 'This attacks the person instead of the answer, and shuts the discussion down.' },
+        { text: 'I think the formula should be...', respectful: true,
+          feedback: 'This corrects the idea, not the person, and moves the discussion forward constructively.' },
+      ],
+    },
+    quiz: [
+      { q: 'Which message demonstrates respectful academic communication?', options: ['Your idea is ridiculous.', 'I respectfully disagree because…', 'Everyone knows you\'re wrong.'], correct: 1 },
+      { q: 'Good constructive feedback should:', options: ['Attack the person\'s intelligence', 'Focus on the idea and suggest an improvement', 'Ignore mistakes entirely'], correct: 1 },
+    ],
+  },
+  {
+    id: 'empathy-impact',
+    icon: '💛',
+    title: 'Empathy & Emotional Impact',
+    summary: 'Understand effects on victims.',
+    content: [
+      'Text has no tone of voice, so a joke can easily read as an attack. Before posting, ask: "How might the receiver feel after reading this?"'
+    ],
+    scenario: {
+      situation: 'A group chat is joking about a teammate\'s late submission and keeps tagging them.',
+      options: [
+        { text: 'Join in with another joke about it.', respectful: false,
+          feedback: 'Piling on — even as a joke — amplifies embarrassment for someone already stressed about being late.' },
+        { text: 'Let\'s give them a break — deadlines can be tough, maybe we can help.', respectful: true,
+          feedback: 'This response considers how the teammate likely feels and redirects the group toward support.' },
+      ],
+    },
+    quiz: [
+      { q: 'Why can online comments feel more hurtful than expected?', options: ['They\'re seen by fewer people', 'Tone and body language are missing, so words can be misread as harsher', 'They disappear quickly'], correct: 1 },
+      { q: 'A likely emotional effect of repeated online harassment is:', options: ['Increased confidence', 'Anxiety or withdrawal', 'No effect at all'], correct: 1 },
+    ],
+  },
+  {
+    id: 'digital-citizenship',
+    icon: '🎓',
+    title: 'Digital Citizenship',
+    summary: 'Apply ethical communication in LMS.',
+    content: [
+      'A good digital citizen communicates respectfully, takes accountability, and speaks up when they see harmful behaviour instead of staying silent.'
+    ],
+    scenario: {
+      situation: 'You see a classmate being mocked in a discussion thread.',
+      options: [
+        { text: 'Scroll past and say nothing.', respectful: false,
+          feedback: 'Staying silent as a bystander lets the harmful behaviour continue unchallenged.' },
+        { text: 'Reply supportively: "That\'s not okay — let\'s keep this respectful."', respectful: true,
+          feedback: 'Speaking up (or reporting) is what turns a bystander into a positive contributor.' },
+      ],
+    },
+    quiz: [
+      { q: 'A good digital citizen who sees bullying should:', options: ['Ignore it, it\'s not their business', 'Speak up supportively or report it', 'Join in to fit in'], correct: 1 },
+      { q: 'Which is a core principle of digital citizenship?', options: ['Post whatever without checking', 'Respectful and accountable communication', 'Anonymity to avoid consequences'], correct: 1 },
+    ],
+  },
+];
+
+const lessonGrid = document.getElementById('lesson-grid');
+const viewer = document.getElementById('lesson-viewer');
+
+/* Completion is tracked only in memory for this page visit (not saved) so
+   that a shared/public computer never shows one visitor's progress to the
+   next - refreshing the page resets it, which is intentional. */
+const completedThisVisit = new Set();
+
+function renderGrid() {
+  lessonGrid.innerHTML = LESSONS.map((lesson, i) => {
+    const done = completedThisVisit.has(lesson.id);
+    return `
+      <div class="lesson-card">
+        <div class="icon">${lesson.icon}</div>
+        <span class="lesson-status ${done ? 'done' : 'todo'}">${done ? '✓ Completed' : 'Not started'}</span>
+        <h3>${lesson.title}</h3>
+        <p>${lesson.summary}</p>
+        <button class="btn btn-primary" data-lesson-index="${i}">${done ? 'Review Lesson' : 'Start Lesson'}</button>
+      </div>
+    `;
+  }).join('');
+
+  lessonGrid.querySelectorAll('button[data-lesson-index]').forEach((btn) => {
+    btn.addEventListener('click', () => openLesson(parseInt(btn.dataset.lessonIndex, 10)));
+  });
+}
+
+function openLesson(index) {
+  const lesson = LESSONS[index];
+  lessonGrid.classList.add('hidden');
+  viewer.classList.remove('hidden');
+  renderIntro(lesson);
+  viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderIntro(lesson) {
+  viewer.innerHTML = `
+    <div class="viewer-eyebrow">Lesson</div>
+    <div class="viewer-title">${lesson.icon} ${lesson.title}</div>
+    <div class="viewer-body">${lesson.content.map((p) => `<p>${p}</p>`).join('')}</div>
+    <div class="viewer-actions">
+      <button class="btn btn-primary" id="to-scenario-btn">Continue to Scenario</button>
+      <button class="btn btn-secondary" id="back-to-grid-btn">Back to Lessons</button>
+    </div>
+  `;
+  document.getElementById('to-scenario-btn').addEventListener('click', () => renderScenario(lesson));
+  document.getElementById('back-to-grid-btn').addEventListener('click', closeViewer);
+}
+
+function renderScenario(lesson) {
+  const s = lesson.scenario;
+  viewer.innerHTML = `
+    <div class="viewer-eyebrow">Scenario</div>
+    <div class="viewer-title">Choose the best response</div>
+    <div class="situation-box"><strong>Situation</strong>${s.situation}</div>
+    <div id="reply-options"></div>
+    <div class="scenario-feedback" id="scenario-feedback"></div>
+    <div class="viewer-actions" id="scenario-actions" style="display:none;">
+      <button class="btn btn-primary" id="to-quiz-btn">Continue to Mini Quiz</button>
+    </div>
+  `;
+  const optionsWrap = document.getElementById('reply-options');
+  s.options.forEach((opt, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'reply-option';
+    b.textContent = '"' + opt.text + '"';
+    b.addEventListener('click', () => {
+      optionsWrap.querySelectorAll('.reply-option').forEach((el) => { el.disabled = true; });
+      b.classList.add(opt.respectful ? 'correct' : 'incorrect');
+      const fb = document.getElementById('scenario-feedback');
+      fb.textContent = opt.feedback;
+      fb.className = 'scenario-feedback visible ' + (opt.respectful ? 'good' : 'bad');
+      document.getElementById('scenario-actions').style.display = 'flex';
+    });
+    optionsWrap.appendChild(b);
+  });
+  document.getElementById('to-quiz-btn').addEventListener('click', () => renderQuiz(lesson));
+}
+
+function renderQuiz(lesson) {
+  viewer.innerHTML = `
+    <div class="viewer-eyebrow">Mini Quiz</div>
+    <div class="viewer-title">Check your understanding</div>
+    <div class="quiz-score-banner" id="quiz-score-banner"></div>
+    <div id="quiz-questions"></div>
+    <div class="viewer-actions">
+      <button class="btn btn-primary" id="submit-quiz-btn">Submit Quiz</button>
+    </div>
+  `;
+  const qWrap = document.getElementById('quiz-questions');
+  lesson.quiz.forEach((question, qi) => {
+    const block = document.createElement('div');
+    block.className = 'quiz-question';
+    block.innerHTML = `<p class="q-text">${qi + 1}. ${question.q}</p>` +
+      question.options.map((opt, oi) => `
+        <label class="quiz-choice" data-q="${qi}" data-o="${oi}">
+          <input type="radio" name="q${qi}" value="${oi}" />
+          <span>${opt}</span>
+        </label>
+      `).join('');
+    qWrap.appendChild(block);
+  });
+
+  document.getElementById('submit-quiz-btn').addEventListener('click', () => {
+    let score = 0;
+    lesson.quiz.forEach((question, qi) => {
+      const checked = qWrap.querySelector(`input[name="q${qi}"]:checked`);
+      const chosen = checked ? parseInt(checked.value, 10) : -1;
+      if (chosen === question.correct) score++;
+      qWrap.querySelectorAll(`label[data-q="${qi}"]`).forEach((label) => {
+        const oi = parseInt(label.dataset.o, 10);
+        if (oi === question.correct) label.classList.add('correct');
+        else if (oi === chosen) label.classList.add('incorrect');
+        label.querySelector('input').disabled = true;
+      });
+    });
+
+    const banner = document.getElementById('quiz-score-banner');
+    banner.textContent = `You scored ${score} / ${lesson.quiz.length}`;
+    banner.classList.add('visible');
+
+    document.getElementById('submit-quiz-btn').outerHTML =
+      '<button class="btn btn-primary" id="complete-lesson-btn">Complete Lesson</button>';
+    document.getElementById('complete-lesson-btn').addEventListener('click', () => {
+      completeLesson(lesson, score);
+    });
+  });
+}
+
+function completeLesson(lesson, score) {
+  completedThisVisit.add(lesson.id);
+
+  viewer.innerHTML = `
+    <div class="viewer-eyebrow">Lesson Complete</div>
+    <div class="viewer-title">🎉 ${lesson.title} — done!</div>
+    <p style="color:var(--gray-600);font-size:.95rem;margin-bottom:18px;">You scored ${score} / ${lesson.quiz.length} on the mini quiz.</p>
+    <div class="viewer-actions">
+      <button class="btn btn-primary" id="next-lesson-btn">Next Lesson</button>
+      <button class="btn btn-secondary" id="done-back-btn">Back to Lessons</button>
+    </div>
+  `;
+  const idx = LESSONS.findIndex((l) => l.id === lesson.id);
+  const nextIdx = idx + 1 < LESSONS.length ? idx + 1 : null;
+  const nextBtn = document.getElementById('next-lesson-btn');
+  if (nextIdx === null) {
+    nextBtn.textContent = 'Back to Lessons';
+    nextBtn.addEventListener('click', closeViewer);
+  } else {
+    nextBtn.addEventListener('click', () => openLesson(nextIdx));
+  }
+  document.getElementById('done-back-btn').addEventListener('click', closeViewer);
+
+  renderGrid();
+}
+
+function closeViewer() {
+  viewer.classList.add('hidden');
+  viewer.innerHTML = '';
+  lessonGrid.classList.remove('hidden');
+  renderGrid();
+  lessonGrid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+renderGrid();
+</script>
+{% endblock %}
