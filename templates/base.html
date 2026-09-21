@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}Digital Citizenship Learning Hub{% endblock %}</title>
+  <title>{% block title %}CyberSafe Learning System{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -238,22 +238,6 @@
       font-size: .8rem;
     }
     footer strong { color: #94a3b8; }
-    .footer-pills {
-      display: flex;
-      justify-content: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-top: 8px;
-    }
-    .fpill {
-      background: rgba(255,255,255,.05);
-      border: 1px solid rgba(255,255,255,.08);
-      color: #64748b;
-      padding: 3px 10px;
-      border-radius: 100px;
-      font-size: .72rem;
-      font-weight: 500;
-    }
 
     {% block extra_style %}{% endblock %}
   </style>
@@ -262,7 +246,7 @@
 <body>
   <nav id="site-nav">
     <div class="nav-inner">
-      <a class="nav-brand" href="{{ url_for('home') }}">🛡️ Digital Citizenship &amp; Safety Hub</a>
+      <a class="nav-brand" href="{{ url_for('home') }}">🛡️ CyberSafe Learning System</a>
       <div class="nav-links">
         <a class="nav-link {{ 'active' if request.path == '/' else '' }}" href="{{ url_for('home') }}">🏠 Home</a>
         <a class="nav-link {{ 'active' if request.path == '/lessons' else '' }}" href="{{ url_for('lessons') }}">📚 Lessons</a>
@@ -276,15 +260,9 @@
   {% block content %}{% endblock %}
 
   <footer>
-    <strong>Digital Citizenship &amp; Cyberbullying Detection Hub</strong>
-    <div class="footer-pills">
-      <span class="fpill">Micro-Lessons</span>
-      <span class="fpill">Scenario Practice</span>
-      <span class="fpill">TF-IDF + Logistic Regression Detection</span>
-      <span class="fpill">HurtLex Lexicon</span>
-    </div>
+    <strong>CyberSafe Learning &amp; Cyberbullying Detection System</strong>
     <div style="margin-top:10px;font-size:.72rem;">
-      For research and demonstration purposes only.
+      For educational and research purposes only.
     </div>
   </footer>
 
