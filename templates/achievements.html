@@ -98,6 +98,79 @@
 
     .reset-row { text-align: center; margin-top: 12px; }
     .reset-note { margin-top: 10px; font-size: .8rem; color: var(--gray-500); }
+
+    /* ── Confirm modal ─────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,.55);
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease;
+    }
+    .modal-overlay.visible { opacity: 1; pointer-events: auto; }
+
+    .modal-card {
+      background: #fff;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--card-shadow-lg);
+      padding: 32px 28px 26px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+      transform: translateY(10px) scale(.98);
+      transition: transform .2s ease;
+    }
+    .modal-overlay.visible .modal-card { transform: translateY(0) scale(1); }
+
+    .modal-icon {
+      width: 56px; height: 56px;
+      margin: 0 auto 16px;
+      border-radius: 50%;
+      background: var(--warning-light);
+      color: var(--warning);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem;
+    }
+    .modal-title { font-size: 1.1rem; font-weight: 800; color: var(--gray-900); margin-bottom: 8px; }
+    .modal-body { font-size: .9rem; color: var(--gray-500); line-height: 1.55; margin-bottom: 24px; }
+    .modal-actions { display: flex; gap: 12px; justify-content: center; }
+    .modal-actions .btn { flex: 1; justify-content: center; }
+    .btn-danger {
+      background: linear-gradient(135deg, var(--danger) 0%, var(--danger-dark) 100%);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(220,38,38,.35);
+    }
+    .btn-danger:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(220,38,38,.45); }
+
+    /* ── Toast ─────────────────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 28px;
+      transform: translate(-50%, 12px);
+      background: var(--gray-900);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 100px;
+      font-size: .85rem;
+      font-weight: 600;
+      box-shadow: var(--card-shadow-lg);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      pointer-events: none;
+      transition: all .25s ease;
+      z-index: 1100;
+    }
+    .toast.visible { opacity: 1; transform: translate(-50%, 0); }
 {% endblock %}
 
 {% block content %}
@@ -119,6 +192,20 @@
       <div class="reset-note">Progress is stored only in this browser tab's session and is never shared with other visitors.</div>
     </div>
   </main>
+
+  <div class="modal-overlay" id="reset-modal-overlay">
+    <div class="modal-card">
+      <div class="modal-icon">♻️</div>
+      <div class="modal-title">Reset all progress?</div>
+      <p class="modal-body">This will clear your Lessons, Scenarios, and Myth or Fact results for this session. This cannot be undone.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="reset-cancel-btn">Cancel</button>
+        <button type="button" class="btn btn-danger" id="reset-confirm-btn">Yes, Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="reset-toast">✅ Progress has been reset</div>
 
 {% endblock %}
 
@@ -266,11 +353,36 @@ function renderAll() {
   renderGrid(s);
 }
 
-document.getElementById('reset-progress-btn').addEventListener('click', () => {
-  const confirmed = window.confirm('Reset all Lessons, Scenarios, and Myth or Fact progress for this session? This cannot be undone.');
-  if (!confirmed) return;
+const resetOverlay = document.getElementById('reset-modal-overlay');
+const toast = document.getElementById('reset-toast');
+let toastTimer = null;
+
+function openResetModal() {
+  resetOverlay.classList.add('visible');
+}
+function closeResetModal() {
+  resetOverlay.classList.remove('visible');
+}
+function showToast(message) {
+  toast.textContent = message;
+  toast.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('visible'), 2600);
+}
+
+document.getElementById('reset-progress-btn').addEventListener('click', openResetModal);
+document.getElementById('reset-cancel-btn').addEventListener('click', closeResetModal);
+resetOverlay.addEventListener('click', (e) => {
+  if (e.target === resetOverlay) closeResetModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && resetOverlay.classList.contains('visible')) closeResetModal();
+});
+document.getElementById('reset-confirm-btn').addEventListener('click', () => {
   CyberSafeProgress.reset();
   renderAll();
+  closeResetModal();
+  showToast('✅ Progress has been reset');
 });
 
 renderAll();
