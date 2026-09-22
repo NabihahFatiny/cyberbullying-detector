@@ -259,6 +259,61 @@ CURATED_SAFE_SENTENCES = {
     "abhor": "I strongly disagree with this.",
 }
 
+# Whole-comment rewrites: a curated set of common harmful comments mapped to
+# one specific, natural safer rewrite, checked against the full message
+# before falling back to the single-word CURATED_SAFE_SENTENCES above. Keys
+# are normalized with _normalize_phrase_for_match() (lowercase, punctuation
+# other than apostrophes stripped) so "You're so fat." and "you're so fat"
+# both match the same entry.
+CURATED_PHRASE_REWRITES = {
+    # General
+    "you're wrong": "I have a different perspective on this topic.",
+    "that's a stupid idea": "I think this idea could be improved by...",
+    "you don't know anything": "Perhaps we should review the concept together.",
+    "this is nonsense": "I don't fully understand this point. Could you clarify?",
+    "your work is terrible": "Your work has potential, but I have a few suggestions.",
+    "stop posting rubbish": "Could you provide more evidence to support your opinion?",
+    "you're lazy": "I noticed the task wasn't completed. Is there any difficulty I can help with?",
+    "everyone will laugh at you": "Let's give constructive feedback respectfully.",
+    # Body shaming
+    "you're so fat": "Let's avoid commenting on someone's appearance.",
+    "you're too skinny": "I hope you're doing well. Let's focus on the discussion.",
+    "no wonder you're overweight": "Everyone deserves respect regardless of body size.",
+    "you look ugly in your profile picture": "Your profile picture is different from before.",
+    "you'd be prettier if you lost weight": "Appearance shouldn't define someone's value or ability.",
+    "you're built like a whale": "Let's keep our comments respectful and relevant.",
+    "your body is disgusting": "I prefer not to make personal remarks about appearance.",
+    "nobody likes short people": "Physical characteristics should never be used to judge others.",
+    "your body looks disgusting": "Let's speak respectfully and avoid personal remarks.",
+    "no one likes short people": "Physical appearance should never be used to judge others.",
+    "you look like a whale": "Please keep comments kind and respectful.",
+    "your face is ugly": "Let's focus on ideas rather than appearance.",
+    "you're not attractive at all": "Everyone deserves to be treated with respect.",
+    # Personal insults
+    "you're stupid": "I think there's a misunderstanding.",
+    "you're an idiot": "Could you explain your reasoning further?",
+    "you know nothing": "Maybe we can review this topic together.",
+    "your answer is nonsense": "I have a different interpretation of the answer.",
+    "you're useless": "Everyone learns at a different pace.",
+    # Academic discussion
+    "this assignment is rubbish": "I think this assignment could be improved by...",
+    "your presentation is terrible": "Your presentation is good, and here are some suggestions for improvement.",
+    "that's the dumbest idea": "I have a different perspective on this idea.",
+    "stop talking": "I'd like to share another viewpoint.",
+    "you're completely wrong": "I respectfully disagree because...",
+    # Mocking & humiliation
+    "everyone is laughing at you": "Let's give constructive feedback instead.",
+    "you're so embarrassing": "We all make mistakes while learning.",
+    "what a loser": "Keep trying. Learning is a process.",
+    "you're pathetic": "Let's encourage one another respectfully.",
+    "nobody wants you in this group": "Let's work together as a team.",
+    # Gender & appearance
+    "girls can't do programming": "Everyone can develop programming skills with practice.",
+    "boys are always lazy": "Let's avoid stereotyping others.",
+    "you look old": "Personal appearance isn't relevant to this discussion.",
+    "your voice is annoying": "Let's focus on the content being presented.",
+}
+
 # HurtLex's own category tags (the "category" column in hurtlex_EN.tsv, e.g.
 # "cds", "an", "qas"...) give a fallback sentence for any of the ~11,000
 # lexicon words not covered above, in the same natural "I" statement style,
@@ -628,6 +683,34 @@ def read_hurtlex_categories(path: Path) -> Dict[str, Set[str]]:
 
 
 _LEADING_ARTICLE_RE = re.compile(r"^(?:a|an|the)\s+(.+)$", re.IGNORECASE)
+_PHRASE_MATCH_STRIP_RE = re.compile(r"[^a-z0-9' ]+")
+
+
+def _normalize_phrase_for_match(text: str) -> str:
+    lowered = ("" if text is None else str(text)).lower()
+    lowered = lowered.replace("’", "'").replace("‘", "'")
+    lowered = _PHRASE_MATCH_STRIP_RE.sub(" ", lowered)
+    return re.sub(r"\s+", " ", lowered).strip()
+
+
+def _match_curated_phrase(raw_text: str) -> Optional[str]:
+    normalized_input = _normalize_phrase_for_match(raw_text)
+    if not normalized_input:
+        return None
+
+    direct = CURATED_PHRASE_REWRITES.get(normalized_input)
+    if direct:
+        return direct
+
+    # Fall back to a substring match so a curated phrase embedded in a longer
+    # message is still caught, preferring the longest (most specific) match.
+    best_rewrite: Optional[str] = None
+    best_length = 0
+    for phrase, rewrite in CURATED_PHRASE_REWRITES.items():
+        if phrase in normalized_input and len(phrase) > best_length:
+            best_rewrite = rewrite
+            best_length = len(phrase)
+    return best_rewrite
 
 
 def _resolve_safer_sentence(term: str, hurtlex_categories: Dict[str, Set[str]]) -> Optional[str]:
@@ -659,7 +742,11 @@ def _resolve_safer_sentence(term: str, hurtlex_categories: Dict[str, Set[str]]) 
     return None
 
 
-def build_safer_rewrite(offensive_terms: Sequence[str], hurtlex_categories: Dict[str, Set[str]]) -> str:
+def build_safer_rewrite(
+    offensive_terms: Sequence[str],
+    hurtlex_categories: Dict[str, Set[str]],
+    raw_text: str = "",
+) -> str:
     # Interface-level safeguard only - this does not touch the trained model,
     # the HurtLex resource, or the pseudo-labelling rule used in the research
     # methodology. Rather than editing the author's own wording (which still
@@ -671,12 +758,21 @@ def build_safer_rewrite(offensive_terms: Sequence[str], hurtlex_categories: Dict
     # to suggest. HurtLex only identifies which words are harmful; it never
     # supplies this wording, and the message shown here never changes the
     # student's original text.
-    if not offensive_terms:
-        return ""
-
     lowered_terms = {str(term).lower() for term in offensive_terms}
     if lowered_terms & VIOLENT_THREAT_TERMS:
         return VIOLENT_THREAT_MESSAGE
+
+    # A curated whole-comment match (e.g. "You're so fat.") gives a more
+    # precise, natural rewrite than stitching one together from a single
+    # flagged word, so it takes priority whenever the full message matches -
+    # checked even when HurtLex found no individual offensive word, since a
+    # comment like "You're so fat." is still recognisably harmful as a whole.
+    phrase_rewrite = _match_curated_phrase(raw_text)
+    if phrase_rewrite:
+        return phrase_rewrite
+
+    if not offensive_terms:
+        return ""
 
     for term in offensive_terms:
         sentence = _resolve_safer_sentence(str(term), hurtlex_categories)
@@ -1309,7 +1405,7 @@ class CyberbullyingPipeline:
             )
 
         safer_text = (
-            build_safer_rewrite(hurtlex_matches, self.hurtlex_categories)
+            build_safer_rewrite(hurtlex_matches, self.hurtlex_categories, text)
             if is_cyberbullying
             else ""
         )
