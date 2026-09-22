@@ -380,6 +380,8 @@ function levelFor(correct) {
 }
 
 function showResults() {
+  CyberSafeProgress.recordMyths(correctCount, QUESTIONS.length);
+
   gameScreen.classList.add('hidden');
   endScreen.classList.remove('hidden');
 
@@ -398,6 +400,7 @@ factBtn.addEventListener('click', () => selectAnswer(false));
 nextBtn.addEventListener('click', goToNext);
 document.getElementById('play-again-btn').addEventListener('click', startGame);
 
+CyberSafeProgress.registerMythsMeta(QUESTIONS.length);
 startGame();
 </script>
 {% endblock %}

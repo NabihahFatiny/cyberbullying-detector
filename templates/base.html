@@ -252,6 +252,7 @@
         <a class="nav-link {{ 'active' if request.path == '/lessons' else '' }}" href="{{ url_for('lessons') }}">📚 Lessons</a>
         <a class="nav-link {{ 'active' if request.path == '/scenarios' else '' }}" href="{{ url_for('scenarios') }}">💬 Scenarios</a>
         <a class="nav-link {{ 'active' if request.path == '/myths' else '' }}" href="{{ url_for('myths') }}">🃏 Myth or Fact</a>
+        <a class="nav-link {{ 'active' if request.path == '/achievements' else '' }}" href="{{ url_for('achievements') }}">🏆 Achievements</a>
         <a class="nav-link {{ 'active' if request.path == '/detector' else '' }}" href="{{ url_for('detector') }}">🔍 Detector</a>
       </div>
     </div>
@@ -266,6 +267,7 @@
     </div>
   </footer>
 
+  <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>

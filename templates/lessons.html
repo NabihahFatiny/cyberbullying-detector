@@ -267,10 +267,12 @@ const LESSONS = [
 const lessonGrid = document.getElementById('lesson-grid');
 const viewer = document.getElementById('lesson-viewer');
 
-/* Completion is tracked only in memory for this page visit (not saved) so
-   that a shared/public computer never shows one visitor's progress to the
-   next - refreshing the page resets it, which is intentional. */
-const completedThisVisit = new Set();
+CyberSafeProgress.registerLessonsMeta(LESSONS.map((l) => ({ id: l.id, totalQuestions: l.quiz.length })));
+
+/* Completion persists for this browser session (sessionStorage) so the
+   Achievements page can read it after navigating away - it is scoped to
+   this tab's session, so it never leaks to a different visitor. */
+const completedThisVisit = new Set(Object.keys(CyberSafeProgress.load().lessons));
 
 function renderGrid() {
   lessonGrid.innerHTML = LESSONS.map((lesson, i) => {
@@ -395,6 +397,7 @@ function renderQuiz(lesson) {
 }
 
 function completeLesson(lesson, score) {
+  CyberSafeProgress.recordLesson(lesson.id, score, lesson.quiz.length);
   completedThisVisit.add(lesson.id);
 
   viewer.innerHTML = `

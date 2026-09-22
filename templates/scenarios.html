@@ -43,8 +43,9 @@
     .viewer-title { font-size: 1.25rem; font-weight: 800; color: var(--gray-900); margin-bottom: 14px; }
 
     .chat-context {
-      background: var(--gray-50);
-      border: 1px solid var(--gray-200);
+      background: linear-gradient(135deg, var(--primary-light) 0%, var(--purple-light) 100%);
+      border: 1px solid #ddd6fe;
+      border-left: 4px solid var(--purple);
       border-radius: var(--radius);
       padding: 16px 18px;
       margin-bottom: 18px;
@@ -54,7 +55,7 @@
     }
     .chat-bubble {
       background: #fff;
-      border: 1px solid var(--gray-200);
+      border: 1px solid #ddd6fe;
       border-radius: var(--radius);
       padding: 12px 14px;
       margin-top: 10px;
@@ -195,10 +196,12 @@ const FEELINGS = [
 const scenarioGrid = document.getElementById('scenario-grid');
 const viewer = document.getElementById('scenario-viewer');
 
-/* Completion is tracked only in memory for this page visit (not saved) so
-   that a shared/public computer never shows one visitor's progress to the
-   next - refreshing the page resets it, which is intentional. */
-const completedThisVisit = new Set();
+CyberSafeProgress.registerScenariosMeta(SCENARIOS.map((s) => s.id));
+
+/* Completion persists for this browser session (sessionStorage) so the
+   Achievements page can read it after navigating away - it is scoped to
+   this tab's session, so it never leaks to a different visitor. */
+const completedThisVisit = new Set(Object.keys(CyberSafeProgress.load().scenarios));
 
 function renderGrid() {
   scenarioGrid.innerHTML = SCENARIOS.map((sc, i) => {
@@ -294,6 +297,7 @@ function renderFeedbackStep(sc, chosenReply) {
     </div>
   `;
 
+  CyberSafeProgress.recordScenario(sc.id, isGood ? 1 : 0, 1);
   completedThisVisit.add(sc.id);
   renderGrid();
 

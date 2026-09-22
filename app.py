@@ -81,6 +81,11 @@ def myths():
     return render_template('myths.html')
 
 
+@app.route('/achievements')
+def achievements():
+    return render_template('achievements.html')
+
+
 @app.route('/test')
 def test():
     return jsonify({"status": "working", "message": "API is functional"})
