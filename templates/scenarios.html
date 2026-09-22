@@ -13,15 +13,24 @@
     .scenario-card {
       background: #fff;
       border: 1px solid var(--gray-200);
+      border-top: 4px solid transparent;
       border-radius: var(--radius-lg);
       box-shadow: var(--card-shadow);
       padding: 20px;
       display: flex;
       flex-direction: column;
       gap: 10px;
+      transition: var(--transition);
     }
+    .scenario-card:hover { box-shadow: var(--card-shadow-lg); transform: translateY(-4px); }
     .scenario-card h3 { font-size: .98rem; font-weight: 700; color: var(--gray-900); }
     .scenario-card p { font-size: .85rem; color: var(--gray-500); flex: 1; }
+
+    /* Colour-coded scenario cards - a light tint + top accent per scenario. */
+    .scenario-card.card-blue   { background: linear-gradient(160deg, #eff6ff 0%, #fff 55%); border-top-color: var(--primary); }
+    .scenario-card.card-purple { background: linear-gradient(160deg, #f5f3ff 0%, #fff 55%); border-top-color: var(--purple); }
+    .scenario-card.card-amber  { background: linear-gradient(160deg, #fffbeb 0%, #fff 55%); border-top-color: var(--amber); }
+    .scenario-card.card-green  { background: linear-gradient(160deg, #f0fdf4 0%, #fff 55%); border-top-color: var(--success); }
 
     .lesson-status.todo { background: var(--gray-100); color: var(--gray-500); }
     .lesson-status.done { background: var(--success-light); color: var(--success); }
@@ -134,6 +143,7 @@
 const SCENARIOS = [
   {
     id: 'scenario-1',
+    color: 'blue',
     title: 'Group Project Criticism',
     summary: 'A teammate\'s slides have a few mistakes before the deadline.',
     context: 'Your team is reviewing a shared slide deck a few minutes before submission. You notice Jordan\'s slides have a couple of factual errors.',
@@ -147,6 +157,7 @@ const SCENARIOS = [
   },
   {
     id: 'scenario-2',
+    color: 'purple',
     title: 'Mocking a Classmate\'s Phrasing',
     summary: 'A classmate\'s forum post has a few grammar mistakes.',
     context: 'A classmate who is a non-native English speaker posts a thoughtful reply in the discussion forum, with a couple of grammar mistakes.',
@@ -160,6 +171,7 @@ const SCENARIOS = [
   },
   {
     id: 'scenario-3',
+    color: 'amber',
     title: 'Group-Chat Pile-On',
     summary: 'A teammate submits their part of the assignment late.',
     context: 'Your project group chat notices a teammate submitted their part a day late, and a few members start joking about it.',
@@ -173,6 +185,7 @@ const SCENARIOS = [
   },
   {
     id: 'scenario-4',
+    color: 'green',
     title: 'Anonymous Forum Insult',
     summary: 'An anonymous post targets low quiz scorers.',
     context: 'An anonymous post appears in the class forum: "Whoever got the lowest score on the quiz should just drop the class." You see it and other students starting to reply.',
@@ -207,7 +220,7 @@ function renderGrid() {
   scenarioGrid.innerHTML = SCENARIOS.map((sc, i) => {
     const done = completedThisVisit.has(sc.id);
     return `
-      <div class="scenario-card">
+      <div class="scenario-card card-${sc.color}">
         <span class="lesson-status ${done ? 'done' : 'todo'}">${done ? '✓ Completed' : 'Not started'}</span>
         <h3>${sc.title}</h3>
         <p>${sc.summary}</p>

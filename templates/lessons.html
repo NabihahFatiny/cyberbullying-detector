@@ -14,16 +14,26 @@
     .lesson-card {
       background: #fff;
       border: 1px solid var(--gray-200);
+      border-top: 4px solid transparent;
       border-radius: var(--radius-lg);
       box-shadow: var(--card-shadow);
       padding: 20px;
       display: flex;
       flex-direction: column;
       gap: 10px;
+      transition: var(--transition);
     }
+    .lesson-card:hover { box-shadow: var(--card-shadow-lg); transform: translateY(-4px); }
     .lesson-card .icon { font-size: 1.6rem; }
     .lesson-card h3 { font-size: .98rem; font-weight: 700; color: var(--gray-900); }
     .lesson-card p { font-size: .82rem; color: var(--gray-500); flex: 1; }
+
+    /* Colour-coded lesson cards - a light tint + top accent per topic. */
+    .lesson-card.card-blue   { background: linear-gradient(160deg, #eff6ff 0%, #fff 55%); border-top-color: var(--primary); }
+    .lesson-card.card-red    { background: linear-gradient(160deg, #fef2f2 0%, #fff 55%); border-top-color: var(--danger); }
+    .lesson-card.card-purple { background: linear-gradient(160deg, #f5f3ff 0%, #fff 55%); border-top-color: var(--purple); }
+    .lesson-card.card-amber  { background: linear-gradient(160deg, #fffbeb 0%, #fff 55%); border-top-color: var(--amber); }
+    .lesson-card.card-green  { background: linear-gradient(160deg, #f0fdf4 0%, #fff 55%); border-top-color: var(--success); }
     .lesson-status {
       display: inline-flex;
       align-items: center;
@@ -147,6 +157,7 @@ const LESSONS = [
   {
     id: 'understanding-cb',
     icon: '🧭',
+    color: 'blue',
     title: 'Understanding Cyberbullying',
     summary: 'Recognize harmful online behaviour.',
     content: [
@@ -177,6 +188,7 @@ const LESSONS = [
   {
     id: 'types-harmful',
     icon: '🚫',
+    color: 'red',
     title: 'Types of Harmful Comments',
     summary: 'Identify insults, harassment, humiliation, threats.',
     content: [
@@ -199,6 +211,7 @@ const LESSONS = [
   {
     id: 'respectful-discussion',
     icon: '💬',
+    color: 'purple',
     title: 'Respectful Academic Discussion',
     summary: 'Practice constructive feedback.',
     content: [
@@ -221,6 +234,7 @@ const LESSONS = [
   {
     id: 'empathy-impact',
     icon: '💛',
+    color: 'amber',
     title: 'Empathy & Emotional Impact',
     summary: 'Understand effects on victims.',
     content: [
@@ -243,6 +257,7 @@ const LESSONS = [
   {
     id: 'digital-citizenship',
     icon: '🎓',
+    color: 'green',
     title: 'Digital Citizenship',
     summary: 'Apply ethical communication in LMS.',
     content: [
@@ -278,7 +293,7 @@ function renderGrid() {
   lessonGrid.innerHTML = LESSONS.map((lesson, i) => {
     const done = completedThisVisit.has(lesson.id);
     return `
-      <div class="lesson-card">
+      <div class="lesson-card card-${lesson.color}">
         <div class="icon">${lesson.icon}</div>
         <span class="lesson-status ${done ? 'done' : 'todo'}">${done ? '✓ Completed' : 'Not started'}</span>
         <h3>${lesson.title}</h3>

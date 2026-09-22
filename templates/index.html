@@ -33,12 +33,13 @@
       text-decoration: none;
       background: #fff;
       border: 1px solid var(--gray-200);
+      border-top: 4px solid transparent;
       border-radius: var(--radius-lg);
       box-shadow: var(--card-shadow);
       padding: 22px;
       transition: var(--transition);
     }
-    .nav-card:hover { box-shadow: var(--card-shadow-lg); transform: translateY(-2px); }
+    .nav-card:hover { box-shadow: var(--card-shadow-lg); transform: translateY(-4px); }
     .nav-card-icon {
       width: 44px; height: 44px;
       border-radius: 10px;
@@ -49,6 +50,18 @@
     .nav-card h3 { font-size: 1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
     .nav-card p { font-size: .85rem; color: var(--gray-500); line-height: 1.5; }
     .nav-card .go { display: inline-block; margin-top: 12px; font-size: .82rem; font-weight: 700; color: var(--primary); }
+
+    /* Colour-coded hub cards - a light tint + top accent matching each
+       section's icon colour, so the hub reads as lively rather than flat white. */
+    .nav-card.card-blue   { background: linear-gradient(160deg, #eff6ff 0%, #fff 55%); border-top-color: var(--primary); }
+    .nav-card.card-purple { background: linear-gradient(160deg, #f5f3ff 0%, #fff 55%); border-top-color: var(--purple); }
+    .nav-card.card-amber  { background: linear-gradient(160deg, #fffbeb 0%, #fff 55%); border-top-color: var(--amber); }
+    .nav-card.card-green  { background: linear-gradient(160deg, #f0fdf4 0%, #fff 55%); border-top-color: var(--success); }
+
+    .nav-card.card-blue .go   { color: var(--primary); }
+    .nav-card.card-purple .go { color: var(--purple); }
+    .nav-card.card-amber .go  { color: var(--warning); }
+    .nav-card.card-green .go  { color: var(--success); }
 {% endblock %}
 
 {% block content %}
@@ -70,25 +83,25 @@
     <p class="section-sub">Everything you need to communicate respectfully online, in one place.</p>
 
     <div class="nav-cards-grid">
-      <a class="nav-card" href="{{ url_for('lessons') }}">
+      <a class="nav-card card-blue" href="{{ url_for('lessons') }}">
         <div class="nav-card-icon" style="background:var(--primary-light);">📚</div>
         <h3>5-Minute Micro Lessons</h3>
         <p>Learn how to communicate respectfully, recognise harmful comments, and show empathy online.</p>
         <span class="go">Start Learning →</span>
       </a>
-      <a class="nav-card" href="{{ url_for('scenarios') }}">
+      <a class="nav-card card-purple" href="{{ url_for('scenarios') }}">
         <div class="nav-card-icon" style="background:var(--purple-light);">💬</div>
         <h3>Scenario-Based Practice</h3>
         <p>Choose the best response to realistic online situations and learn how your words may affect others.</p>
         <span class="go">Start Practising →</span>
       </a>
-      <a class="nav-card" href="{{ url_for('myths') }}">
+      <a class="nav-card card-amber" href="{{ url_for('myths') }}">
         <div class="nav-card-icon" style="background:var(--warning-light);">🃏</div>
         <h3>Myth or Fact Challenge</h3>
         <p>Test your knowledge by deciding whether each statement about cyberbullying is a myth or a fact.</p>
         <span class="go">Play the Challenge →</span>
       </a>
-      <a class="nav-card" href="{{ url_for('detector') }}">
+      <a class="nav-card card-green" href="{{ url_for('detector') }}">
         <div class="nav-card-icon" style="background:var(--success-light);">🔍</div>
         <h3>Cyberbullying Detector</h3>
         <p>Check your message before posting and receive suggestions for making it safer and more respectful.</p>
